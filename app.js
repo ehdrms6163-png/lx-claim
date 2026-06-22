@@ -563,26 +563,26 @@ function _initHandlers(){
   document.addEventListener('click',e=>{
     const l=$('ac-list');
     if(l&&!l.contains(e.target)&&e.target.id!=='ep-s')l.style.display='none';
-    // data-fn 버튼 찾기 (클릭된 요소부터 부모까지 순회)
+    // 부모 순회로 처리
     let el=e.target;
     while(el&&el!==document.body){
-      if(el.dataset&&el.dataset.fn){
-        const fn=FM[el.dataset.fn];
-        if(fn){fn(el);return;}
+      if(el.dataset){
+        // data-fn
+        if(el.dataset.fn){const fn=FM[el.dataset.fn];if(fn){fn(el);return;}}
+        // data-em (수정)
+        if(el.dataset.emType){openEM(el.dataset.emType,el.dataset.emId);return;}
+        // data-del (삭제)
+        if(el.dataset.delType){delItem(el.dataset.delType,el.dataset.delId);return;}
+        // data-claim-id (클레임 행)
+        if('claimId' in el.dataset){
+          const cid=el.dataset.claimId;
+          const insRow=el.dataset.insRow;
+          if(cid)openDetail(cid);
+          else if(insRow){try{prefillFromInsRow(JSON.parse(insRow.replace(/&apos;/g,"'")));}catch(err){console.error(err);}}
+          return;
+        }
       }
       el=el.parentElement;
-    }
-    // 클레임 행 클릭
-    let tr=e.target;
-    while(tr&&tr!==document.body){
-      if(tr.dataset&&tr.dataset.claimId!==undefined){
-        const cid=tr.dataset.claimId;
-        const insRow=tr.dataset.insRow;
-        if(cid)openDetail(cid);
-        else if(insRow){try{prefillFromInsRow(JSON.parse(insRow.replace(/&apos;/g,"'")));}catch(err){console.error(err);}}
-        return;
-      }
-      tr=tr.parentElement;
     }
   });
   document.addEventListener('input',e=>{
@@ -593,6 +593,8 @@ function _initHandlers(){
     }
   });
   document.addEventListener('change',e=>{
+    // data-map-id (고객사-보험사 매핑 select)
+    if(e.target.dataset&&e.target.dataset.mapId){clientMapping[e.target.dataset.mapId]=e.target.value;return;}
     let el=e.target;
     while(el&&el!==document.body){
       if(el.dataset&&el.dataset.fnc){const fn=FM[el.dataset.fnc];if(fn){fn(el);return;}}
@@ -627,7 +629,7 @@ function renderInsMappingRows(){
     return `<div class="map-row">
       <div class="map-client">${c.name}</div>
       <span style="color:var(--tx3);font-size:12px;">→</span>
-      <select class="map-select" onchange="clientMapping['${c.id}']=this.value">
+      <select class="map-select" data-map-id="${c.id}">
         <option value="">미지정</option>
         ${insCompanies.map(x=>`<option value="${x.id}" ${insId===x.id?'selected':''}>${x.name}</option>`).join('')}
       </select>
@@ -1106,8 +1108,8 @@ function renderClientsList(){
         <span class="ei-badge">${(()=>{const ins=getInsForClient(c.id);return ins?`담당: ${ins.name}`:'보험사 미지정';})()}</span>
       </div>
       <div style="display:flex;gap:4px;">
-        <button class="btn sm icon" onclick="openEM('client','${c.id}')"><svg class="ico ico-md"><use href="#ico-pencil"/></svg></button>
-        <button class="btn sm icon dng" onclick="delItem('client','${c.id}')"><svg class="ico ico-md"><use href="#ico-trash"/></svg></button>
+        <button class="btn sm icon" data-em-type="client" data-em-id="${c.id}"><svg class="ico ico-md"><use href="#ico-pencil"/></svg></button>
+        <button class="btn sm icon dng" data-del-type="client" data-del-id="${c.id}"><svg class="ico ico-md"><use href="#ico-trash"/></svg></button>
       </div>
     </div>`).join(''):'<div class="empty" style="padding:20px;">고객사가 없습니다</div>';
 }
@@ -1129,8 +1131,8 @@ function renderInsList(){
         <span class="ei-badge">${clients.filter(c=>clientMapping[c.id]===ins.id).length}개 고객사 담당</span>
       </div>
       <div style="display:flex;gap:4px;">
-        <button class="btn sm icon" onclick="openEM('ins','${ins.id}')"><svg class="ico ico-md"><use href="#ico-pencil"/></svg></button>
-        <button class="btn sm icon dng" onclick="delItem('ins','${ins.id}')"><svg class="ico ico-md"><use href="#ico-trash"/></svg></button>
+        <button class="btn sm icon" data-em-type="ins" data-em-id="${ins.id}"><svg class="ico ico-md"><use href="#ico-pencil"/></svg></button>
+        <button class="btn sm icon dng" data-del-type="ins" data-del-id="${ins.id}"><svg class="ico ico-md"><use href="#ico-trash"/></svg></button>
       </div>
     </div>`).join(''):'<div class="empty" style="padding:20px;">보험사가 없습니다</div>';
 }
@@ -1148,7 +1150,7 @@ function renderCfgMapping(){
     return `<div class="map-row">
       <div class="map-client">${c.name}</div>
       <span style="color:var(--tx3);font-size:12px;">→</span>
-      <select class="map-select" onchange="clientMapping['${c.id}']=this.value">
+      <select class="map-select" data-map-id="${c.id}">
         <option value="">미지정</option>
         ${insCompanies.map(x=>`<option value="${x.id}" ${insId===x.id?'selected':''}>${x.name}</option>`).join('')}
       </select>
@@ -1171,8 +1173,8 @@ function renderAsgnList(){
         <span class="ei-sub">${a.area||''}</span>
       </div>
       <div style="display:flex;gap:4px;">
-        <button class="btn sm icon" onclick="openEM('asgn','${a.id}')"><svg class="ico ico-md"><use href="#ico-pencil"/></svg></button>
-        <button class="btn sm icon dng" onclick="delItem('asgn','${a.id}')"><svg class="ico ico-md"><use href="#ico-trash"/></svg></button>
+        <button class="btn sm icon" data-em-type="asgn" data-em-id="${a.id}"><svg class="ico ico-md"><use href="#ico-pencil"/></svg></button>
+        <button class="btn sm icon dng" data-del-type="asgn" data-del-id="${a.id}"><svg class="ico ico-md"><use href="#ico-trash"/></svg></button>
       </div>
     </div>`).join(''):'<div class="empty" style="padding:20px;">담당자가 없습니다</div>';
 }
@@ -1190,8 +1192,8 @@ function renderAtypeList(){
       <span class="code-name">${t.name}</span>
       <span class="code-badge">${t.code}</span>
       <div style="display:flex;gap:4px;">
-        <button class="btn sm icon" onclick="openEM('atype','${t.id}')"><svg class="ico ico-md"><use href="#ico-pencil"/></svg></button>
-        <button class="btn sm icon dng" onclick="delItem('atype','${t.id}')"><svg class="ico ico-md"><use href="#ico-trash"/></svg></button>
+        <button class="btn sm icon" data-em-type="atype" data-em-id="${t.id}"><svg class="ico ico-md"><use href="#ico-pencil"/></svg></button>
+        <button class="btn sm icon dng" data-del-type="atype" data-del-id="${t.id}"><svg class="ico ico-md"><use href="#ico-trash"/></svg></button>
       </div>
     </div>`).join('');
 }
@@ -1212,8 +1214,8 @@ function renderPgroupList(){
       <span class="code-badge">${g.code}</span>
       <span style="font-size:11px;color:var(--tx2);flex:1;padding-left:8px;">${g.desc||''}</span>
       <div style="display:flex;gap:4px;">
-        <button class="btn sm icon" onclick="openEM('pgroup','${g.id}')"><svg class="ico ico-md"><use href="#ico-pencil"/></svg></button>
-        <button class="btn sm icon dng" onclick="delItem('pgroup','${g.id}')"><svg class="ico ico-md"><use href="#ico-trash"/></svg></button>
+        <button class="btn sm icon" data-em-type="pgroup" data-em-id="${g.id}"><svg class="ico ico-md"><use href="#ico-pencil"/></svg></button>
+        <button class="btn sm icon dng" data-del-type="pgroup" data-del-id="${g.id}"><svg class="ico ico-md"><use href="#ico-trash"/></svg></button>
       </div>
     </div>`).join(''):'<div class="empty" style="padding:20px;">대분류가 없습니다</div>';
 }
@@ -1235,8 +1237,8 @@ function renderPcatList(){
       <span class="code-name">${p.name}</span>
       <span class="code-badge">${p.code}</span>
       <div style="display:flex;gap:4px;">
-        <button class="btn sm icon" onclick="openEM('pcat','${p.id}')"><svg class="ico ico-md"><use href="#ico-pencil"/></svg></button>
-        <button class="btn sm icon dng" onclick="delItem('pcat','${p.id}')"><svg class="ico ico-md"><use href="#ico-trash"/></svg></button>
+        <button class="btn sm icon" data-em-type="pcat" data-em-id="${p.id}"><svg class="ico ico-md"><use href="#ico-pencil"/></svg></button>
+        <button class="btn sm icon dng" data-del-type="pcat" data-del-id="${p.id}"><svg class="ico ico-md"><use href="#ico-trash"/></svg></button>
       </div>
     </div>`).join('');
 }

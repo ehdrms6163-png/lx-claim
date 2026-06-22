@@ -786,6 +786,31 @@ body{font-family:var(--font);font-size:14px;color:var(--tx1);background:var(--bg
   </div>
 </div>
 
+<!-- 자동생성 미리보기 모달 -->
+<div class="ov" id="auto-create-modal">
+  <div class="modal" style="max-width:820px;max-height:85vh;display:flex;flex-direction:column;">
+    <div class="mh">
+      <div style="flex:1;">
+        <h2>신규 클레임 자동 생성 미리보기</h2>
+        <div id="auto-modal-desc" style="font-size:12px;color:var(--tx2);margin-top:2px;"></div>
+      </div>
+      <button class="btn sm" id="auto-modal-close"><svg class="ico ico-md"><use href="#ico-x"/></svg></button>
+    </div>
+    <div style="overflow-y:auto;flex:1;padding:14px;">
+      <div class="tbl">
+        <div class="th" style="grid-template-columns:110px 80px 80px 1fr 80px 80px 130px;">
+          <span>보험사 접수번호</span><span>대구분</span><span>제품구분</span><span>고객명/주소</span><span>통문일자</span><span>보험접수일</span><span>손해사정 담당자</span>
+        </div>
+        <div id="auto-modal-list"></div>
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn" id="auto-modal-cancel">취소</button>
+      <button class="btn pri" id="auto-modal-confirm">등록</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script type="module" src="app.js"></script>
 

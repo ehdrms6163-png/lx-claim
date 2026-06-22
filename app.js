@@ -599,6 +599,10 @@ function _initHandlers(){
       el=el.parentElement;
     }
   });
+  // 자동생성 모달 버튼 직접 바인딩
+  const amc=$('auto-modal-close');if(amc)amc.addEventListener('click',()=>$('auto-create-modal').classList.remove('open'));
+  const amca=$('auto-modal-cancel');if(amca)amca.addEventListener('click',()=>$('auto-create-modal').classList.remove('open'));
+  const amco=$('auto-modal-confirm');if(amco)amco.addEventListener('click',()=>{autoCreateClaims(_pendingAutoRows,_pendingAutoInsId);$('auto-create-modal').classList.remove('open');});
 }
 
 
@@ -712,67 +716,38 @@ function uploadInsFile(input,insId){
 }
 
 /* 자동 클레임 생성 미리보기 */
+let _pendingAutoRows=[], _pendingAutoInsId='';
 function showAutoCreatePreview(parsed, insId){
-  // 기존 클레임에 없는 건만 필터 (보험사 접수번호 기준)
   const existingNos=new Set(claims.map(c=>c.insNo).filter(Boolean));
   const newRows=parsed.filter(r=>r.접수번호&&!existingNos.has(r.접수번호)&&!matchInsRow(r));
   if(!newRows.length){
-    // 새 건 없음
     const panel=$('ins-detail-panel');
     if(panel){
       const notice=document.createElement('div');
       notice.style.cssText='margin-top:10px;padding:9px 13px;background:#EAF3DE;border:0.5px solid #C0DD97;border-radius:8px;font-size:13px;color:#3B6D11;';
       notice.textContent=`✓ 새로 생성할 클레임 없음 — 전체 ${parsed.length}건 기존 매칭`;
-      panel.appendChild(notice);
+      panel.prepend(notice);
       setTimeout(()=>notice.remove(),4000);
     }
     return;
   }
-  // 모달 생성
-  const existing=document.getElementById('auto-create-modal');
-  if(existing)existing.remove();
-  const modal=document.createElement('div');
-  modal.id='auto-create-modal';
-  modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);display:flex;align-items:flex-start;justify-content:center;padding:40px 16px;z-index:300;';
-  const rowsJson=JSON.stringify(newRows).replace(/"/g,'&quot;');
-  modal.innerHTML=`
-    <div style="background:var(--bg1);border-radius:12px;border:0.5px solid var(--bd2);width:100%;max-width:780px;max-height:82vh;display:flex;flex-direction:column;">
-      <div style="display:flex;align-items:center;gap:9px;padding:13px 16px;border-bottom:0.5px solid var(--bd3);">
-        <div style="flex:1;">
-          <div style="font-size:15px;font-weight:500;">신규 클레임 자동 생성 미리보기</div>
-          <div style="font-size:12px;color:var(--tx2);margin-top:2px;">아래 <b style="color:#185FA5;">${newRows.length}건</b>이 새로 생성됩니다. 확인 후 등록해주세요.</div>
-        </div>
-        <button id="auto-modal-close" style="padding:4px 9px;border:0.5px solid var(--bd2);border-radius:8px;background:var(--bg1);cursor:pointer;font-size:12px;font-family:var(--font);color:var(--tx1);">닫기</button>
-      </div>
-      <div style="overflow-y:auto;flex:1;padding:14px;">
-        <div style="background:var(--bg1);border:0.5px solid var(--bd3);border-radius:10px;overflow:hidden;">
-          <div style="display:grid;grid-template-columns:110px 90px 80px 1fr 80px 80px 120px;gap:7px;padding:8px 12px;background:var(--bg2);font-size:12px;color:var(--tx2);font-weight:500;">
-            <span>보험사 접수번호</span><span>대구분</span><span>제품구분</span><span>고객명/주소</span><span>통문일자</span><span>보험접수일</span><span>손해사정 담당자</span>
-          </div>
-          ${newRows.map((r,i)=>`
-            <div style="display:grid;grid-template-columns:110px 90px 80px 1fr 80px 80px 120px;gap:7px;padding:8px 12px;border-top:0.5px solid var(--bd3);font-size:12px;align-items:center;">
-              <span style="font-family:var(--mono);font-size:11px;color:#185FA5;">${r.접수번호}</span>
-              <span>${r.대구분||'-'}</span>
-              <span>${r.제품구분||'-'}</span>
-              <span><b style="font-weight:500;">${(r.고객명||'').replace(/\(.*\)/,'')}</b><br><span style="color:var(--tx2);font-size:11px;">${(r.주소||'').slice(0,20)}</span></span>
-              <span>${r.설치일||'-'}</span>
-              <span>${r.접수일||'-'}</span>
-              <span style="font-size:11px;">${r.손해사정담당자||'-'}${r.손해사정연락처?`<br><span style="color:var(--tx2);">${r.손해사정연락처}</span>`:''}</span>
-            </div>`).join('')}
-        </div>
-      </div>
-      <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:0.5px solid var(--bd3);">
-        <button id="auto-modal-cancel" style="padding:6px 13px;border:0.5px solid var(--bd2);border-radius:8px;background:var(--bg1);cursor:pointer;font-size:13px;font-family:var(--font);color:var(--tx1);">취소</button>
-        <button id="auto-modal-confirm" data-rows="${rowsJson}" data-insid="${insId}" style="padding:6px 13px;border:0.5px solid #185FA5;border-radius:8px;background:#185FA5;cursor:pointer;font-size:13px;font-family:var(--font);color:#fff;font-weight:500;">${newRows.length}건 클레임 등록</button>
-      </div>
-    </div>`;
-  document.body.appendChild(modal);
-  // 버튼 이벤트 직접 바인딩
-  document.getElementById('auto-modal-close').addEventListener('click',()=>modal.remove());
-  document.getElementById('auto-modal-cancel').addEventListener('click',()=>modal.remove());
-  document.getElementById('auto-modal-confirm').addEventListener('click',function(){
-    autoCreateClaims(newRows, insId);
-  });
+  _pendingAutoRows=newRows;
+  _pendingAutoInsId=insId;
+  // 모달 내용 채우기
+  $('auto-modal-desc').innerHTML=`아래 <b style="color:#185FA5;">${newRows.length}건</b>이 새로 생성됩니다. 확인 후 등록해주세요.`;
+  $('auto-modal-confirm').textContent=`${newRows.length}건 클레임 등록`;
+  $('auto-modal-list').innerHTML=newRows.map(r=>`
+    <div class="tr" style="grid-template-columns:110px 80px 80px 1fr 80px 80px 130px;cursor:default;">
+      <span style="font-family:var(--mono);font-size:11px;color:var(--blue);">${r.접수번호}</span>
+      <span style="font-size:12px;">${r.대구분||'-'}</span>
+      <span style="font-size:12px;">${r.제품구분||'-'}</span>
+      <span><b style="font-weight:500;">${(r.고객명||'').replace(/\(.*\)/,'')}</b><br><span style="color:var(--tx2);font-size:11px;">${(r.주소||'').slice(0,22)}</span></span>
+      <span style="font-size:12px;">${r.설치일||'-'}</span>
+      <span style="font-size:12px;">${r.접수일||'-'}</span>
+      <span style="font-size:11px;">${r.손해사정담당자||'-'}${r.손해사정연락처?`<br><span style="color:var(--tx2);">${r.손해사정연락처}</span>`:''}</span>
+    </div>`).join('');
+  $('auto-create-modal').classList.add('open');
+}
   document.body.appendChild(modal);
 }
 

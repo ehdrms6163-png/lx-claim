@@ -137,6 +137,12 @@ function getPcatCode(name){return productCats.find(x=>x.name===name)?.code||'ETC
 function getAtypeCode(name){return accidentTypes.find(x=>x.name===name)?.code||'E';}
 function getAllInsRows(){const rows=[];Object.entries(insFiles).forEach(([insId,files])=>{files.forEach(f=>{(f.rows||[]).forEach(r=>rows.push({...r,_insId:insId,_fileName:f.filename}));});});return rows;}
 function matchInsRow(row){
+  // 1) 보험사 접수번호로 먼저 매칭
+  if(row.접수번호){
+    const byNo=claims.find(c=>c.insNo===row.접수번호);
+    if(byNo)return byNo;
+  }
+  // 2) 고객명+설치일로 매칭
   const name=(row.고객명||'').replace(/\(.*\)/,'').trim();
   return claims.find(c=>{
     const nm=c.name&&c.name.includes(name)&&name.length>1;
@@ -193,6 +199,11 @@ function normalizeDate(raw){
 function normalizeNum(v){if(!v&&v!==0)return 0;if(typeof v==='number')return v;return parseFloat(String(v).replace(/[,\s원]/g,''))||0;}
 function parseInsRow(row){
   const g=(...keys)=>{for(const k of keys){if(row[k]!==undefined&&row[k]!==null&&row[k]!=='')return String(row[k]).trim();}return '';};
+  // 손해사정 담당자 파싱 (이름+직급/연락처 형식)
+  const adjRaw=g('손해사정 담당자','담당자','사정인');
+  const adjLines=adjRaw.split(/[\n\r\/]/).map(s=>s.trim()).filter(Boolean);
+  const adjName=adjLines[0]||'';
+  const adjPhone=adjLines[1]||'';
   return {
     접수번호:g('접수번호','PL접수번호'),
     고객명:g('고객명(연락처)','고객명','성명'),
@@ -214,6 +225,8 @@ function parseInsRow(row){
     원인2:g('원인2'),
     귀책여부:g('설치 귀책 여부','귀책여부'),
     평가반영:g('협력업체\n평가 반영 여부','협력업체 평가 반영 여부','평가반영여부'),
+    손해사정담당자:adjName,
+    손해사정연락처:adjPhone,
   };
 }
 function updateInsBadge(){
@@ -545,6 +558,7 @@ function _initHandlers(){
     showSPpgroups:(el)=>showSP('product-groups',el),
     updateIdPreview,
     uploadTemplate:(el)=>uploadTemplate(el),
+    autoCreateClaims:(el)=>autoCreateClaims(JSON.parse(el.dataset.rows||'[]'),el.dataset.insid||''),
   };
   document.addEventListener('click',e=>{
     const l=$('ac-list');
@@ -684,13 +698,147 @@ function uploadInsFile(input,insId){
       else{const wb=XLSX.read(e.target.result,{type:'array'});const ws=wb.Sheets[wb.SheetNames[0]];rows=XLSX.utils.sheet_to_json(ws,{defval:''});}
       const parsed=rows.map(parseInsRow).filter(r=>r.접수번호||r.고객명);
       if(!insFiles[insId])insFiles[insId]=[];
-      insFiles[insId].unshift({filename:f.name,uploadDate:new Date().toISOString().slice(0,10),rows:parsed});
+      // 기존 파일에서 같은 파일명 있으면 교체, 없으면 추가
+      const existIdx=insFiles[insId].findIndex(x=>x.filename===f.name);
+      if(existIdx>=0)insFiles[insId][existIdx]={filename:f.name,uploadDate:new Date().toISOString().slice(0,10),rows:parsed};
+      else insFiles[insId].unshift({filename:f.name,uploadDate:new Date().toISOString().slice(0,10),rows:parsed});
       persist();renderInsDetail(insId);renderInsSidebar();renderInsStats2();updateInsBadge();
-      
+      // 새로 생성할 건 미리보기
+      showAutoCreatePreview(parsed, insId);
     }catch(err){console.error('파싱 오류:', err.message);}
   };
   if(isCSV)reader.readAsText(f,'utf-8');else reader.readAsArrayBuffer(f);
   input.value='';
+}
+
+/* 자동 클레임 생성 미리보기 */
+function showAutoCreatePreview(parsed, insId){
+  // 기존 클레임에 없는 건만 필터 (보험사 접수번호 기준)
+  const existingNos=new Set(claims.map(c=>c.insNo).filter(Boolean));
+  const newRows=parsed.filter(r=>r.접수번호&&!existingNos.has(r.접수번호)&&!matchInsRow(r));
+  if(!newRows.length){
+    // 새 건 없음
+    const panel=$('ins-detail-panel');
+    if(panel){
+      const notice=document.createElement('div');
+      notice.style.cssText='margin-top:10px;padding:9px 13px;background:#EAF3DE;border:0.5px solid #C0DD97;border-radius:8px;font-size:13px;color:#3B6D11;';
+      notice.textContent=`✓ 새로 생성할 클레임 없음 — 전체 ${parsed.length}건 기존 매칭`;
+      panel.appendChild(notice);
+      setTimeout(()=>notice.remove(),4000);
+    }
+    return;
+  }
+  // 모달 생성
+  const existing=document.getElementById('auto-create-modal');
+  if(existing)existing.remove();
+  const modal=document.createElement('div');
+  modal.id='auto-create-modal';
+  modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);display:flex;align-items:flex-start;justify-content:center;padding:40px 16px;z-index:300;';
+  const rowsJson=JSON.stringify(newRows).replace(/"/g,'&quot;');
+  modal.innerHTML=`
+    <div style="background:var(--bg1);border-radius:12px;border:0.5px solid var(--bd2);width:100%;max-width:780px;max-height:82vh;display:flex;flex-direction:column;">
+      <div style="display:flex;align-items:center;gap:9px;padding:13px 16px;border-bottom:0.5px solid var(--bd3);">
+        <div style="flex:1;">
+          <div style="font-size:15px;font-weight:500;">신규 클레임 자동 생성 미리보기</div>
+          <div style="font-size:12px;color:var(--tx2);margin-top:2px;">아래 <b style="color:#185FA5;">${newRows.length}건</b>이 새로 생성됩니다. 확인 후 등록해주세요.</div>
+        </div>
+        <button id="auto-modal-close" style="padding:4px 9px;border:0.5px solid var(--bd2);border-radius:8px;background:var(--bg1);cursor:pointer;font-size:12px;font-family:var(--font);color:var(--tx1);">닫기</button>
+      </div>
+      <div style="overflow-y:auto;flex:1;padding:14px;">
+        <div style="background:var(--bg1);border:0.5px solid var(--bd3);border-radius:10px;overflow:hidden;">
+          <div style="display:grid;grid-template-columns:110px 90px 80px 1fr 80px 80px 120px;gap:7px;padding:8px 12px;background:var(--bg2);font-size:12px;color:var(--tx2);font-weight:500;">
+            <span>보험사 접수번호</span><span>대구분</span><span>제품구분</span><span>고객명/주소</span><span>통문일자</span><span>보험접수일</span><span>손해사정 담당자</span>
+          </div>
+          ${newRows.map((r,i)=>`
+            <div style="display:grid;grid-template-columns:110px 90px 80px 1fr 80px 80px 120px;gap:7px;padding:8px 12px;border-top:0.5px solid var(--bd3);font-size:12px;align-items:center;">
+              <span style="font-family:var(--mono);font-size:11px;color:#185FA5;">${r.접수번호}</span>
+              <span>${r.대구분||'-'}</span>
+              <span>${r.제품구분||'-'}</span>
+              <span><b style="font-weight:500;">${(r.고객명||'').replace(/\(.*\)/,'')}</b><br><span style="color:var(--tx2);font-size:11px;">${(r.주소||'').slice(0,20)}</span></span>
+              <span>${r.설치일||'-'}</span>
+              <span>${r.접수일||'-'}</span>
+              <span style="font-size:11px;">${r.손해사정담당자||'-'}${r.손해사정연락처?`<br><span style="color:var(--tx2);">${r.손해사정연락처}</span>`:''}</span>
+            </div>`).join('')}
+        </div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:0.5px solid var(--bd3);">
+        <button id="auto-modal-cancel" style="padding:6px 13px;border:0.5px solid var(--bd2);border-radius:8px;background:var(--bg1);cursor:pointer;font-size:13px;font-family:var(--font);color:var(--tx1);">취소</button>
+        <button id="auto-modal-confirm" data-rows="${rowsJson}" data-insid="${insId}" style="padding:6px 13px;border:0.5px solid #185FA5;border-radius:8px;background:#185FA5;cursor:pointer;font-size:13px;font-family:var(--font);color:#fff;font-weight:500;">${newRows.length}건 클레임 등록</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  // 버튼 이벤트 직접 바인딩
+  document.getElementById('auto-modal-close').addEventListener('click',()=>modal.remove());
+  document.getElementById('auto-modal-cancel').addEventListener('click',()=>modal.remove());
+  document.getElementById('auto-modal-confirm').addEventListener('click',function(){
+    autoCreateClaims(newRows, insId);
+  });
+  document.body.appendChild(modal);
+}
+
+/* 자동 클레임 생성 실행 */
+function autoCreateClaims(newRows, insId){
+  if(typeof newRows==='string')newRows=JSON.parse(newRows);
+  const today=new Date().toISOString().slice(0,10);
+  let created=0;
+  newRows.forEach(r=>{
+    // 대구분 → 대분류
+    const grp=mapDaeguBun(r.대구분)||{id:'',code:'XX',name:'미지정'};
+    // 제품구분 → 제품군
+    const pcat=mapJeumunGubun(r.제품구분);
+    const pcatCode=pcat?.code||'ETC';
+    const pcatName=pcat?.name||r.제품구분||'기타';
+    // 사고유형
+    const t=(r.원인1||'')+(r.원인2||'');
+    const atype=accidentTypes.find(x=>t.includes(x.name));
+    const typeCode=atype?.code||'E';
+    const typeName=atype?.name||'기타';
+    // 고객사 역매핑
+    const cEntry=Object.entries(clientMapping).find(([k,v])=>v===insId);
+    const clientId=cEntry?.[0]||'';
+    const clientName=clients.find(c=>c.id===clientId)?.name||'';
+    // 접수번호 생성
+    const year=new Date().getFullYear();
+    const newId=genId(year,grp.code,pcatCode,typeCode);
+    // 귀책여부
+    const lv=(r.귀책여부||'').trim();
+    const liability=['귀책','비귀책','확인중','분쟁중'].includes(lv)?lv:(lv?'확인중':'');
+    // 평가반영
+    let evalReflect='';
+    if(r.평가반영){const ev=r.평가반영.trim();if(ev.includes('미반영'))evalReflect='미반영';else if(ev.includes('반영'))evalReflect='반영';else if(ev.includes('검토'))evalReflect='검토중';}
+    claims.unshift({
+      id:newId,
+      clientId,client:clientName,
+      pcat:pcatCode,pcatName,
+      groupId:grp.id,groupCode:grp.code,groupName:grp.name,
+      name:(r.고객명||'').replace(/\(.*\)/,'').trim(),
+      phone:'',addr:r.주소||'',product:r.제품구분||'',
+      idate:r.설치일||'',
+      tname:r.설치기사||'',tid:'',
+      type:typeName,typeCode,
+      assignee:'',
+      amount:r.추산보험금OS||r.지급보험금||0,
+      insDate:r.접수일||'',
+      date:today,
+      desc:r.피해내용||'-',
+      note:`보험사 접수번호: ${r.접수번호} / 손해사정: ${r.손해사정담당자||'-'} ${r.손해사정연락처||''}`.trim(),
+      insCoId:insId,
+      insNo:r.접수번호,
+      liability,evalReflect,
+      status:'접수',
+      history:[{date:today,text:`보험사 파일에서 자동 생성 (${r.접수번호})`}],
+    });
+    created++;
+  });
+  persist();
+  document.getElementById('auto-create-modal')?.remove();
+  // 완료 메시지
+  const msg=document.createElement('div');
+  msg.style.cssText='position:fixed;bottom:24px;right:24px;padding:12px 18px;background:#185FA5;color:#fff;border-radius:10px;font-size:13px;font-weight:500;z-index:400;box-shadow:0 4px 16px rgba(0,0,0,0.2);';
+  msg.textContent=`✓ ${created}건 클레임 자동 생성 완료`;
+  document.body.appendChild(msg);
+  setTimeout(()=>msg.remove(),3000);
+  renderInsDetail(insId);updateInsBadge();
 }
 function loadSampleInsFile(insId){
   if(!insFiles[insId])insFiles[insId]=[];

@@ -1,7 +1,35 @@
 
 /* ══════════════════════════════════════════════
-   DATA LAYER
+   FIREBASE 초기화
 ══════════════════════════════════════════════ */
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAy6HPR4oihXAZq_1oLdlfH_Ol2LRfwzAo",
+  authDomain: "lx-claim.firebaseapp.com",
+  projectId: "lx-claim",
+  storageBucket: "lx-claim.firebasestorage.app",
+  messagingSenderId: "64279299234",
+  appId: "1:64279299234:web:67237c233f372e99f043fb"
+};
+const fbApp = initializeApp(firebaseConfig);
+const db = getFirestore(fbApp);
+
+/* Firestore 저장/로드 헬퍼 */
+async function fsGet(docId, def){
+  try{
+    const snap = await getDoc(doc(db,'lx-claim',docId));
+    return snap.exists() ? snap.data().value : def;
+  }catch(e){return def;}
+}
+async function fsSet(docId, value){
+  try{
+    await setDoc(doc(db,'lx-claim',docId), {value});
+  }catch(e){console.error('Firestore 저장 오류:',e);}
+}
+
+
 const COLORS=['#185FA5','#3B6D11','#BA7517','#A32D2D','#534AB7','#888780','#0E7C7B','#7D3C98'];
 function $(id){return document.getElementById(id);}
 function uid(p){return (p||'x')+Date.now().toString(36)+Math.random().toString(36).slice(2,5);}
@@ -58,29 +86,47 @@ const defInsRows=[
 ];
 const defEP=[{고객명:'김민수',고객주소:'서울 강남구 역삼동 123',제품모델:'LG DUALCOOL FQ18VDWSA2',통문일자:'2026-06-08',설치기사명:'홍준표',설치기사ID:'T20341'},{고객명:'이정현',고객주소:'경기 성남시 분당구 야탑동 45',제품모델:'LG DIOS DFB22PT',통문일자:'2026-06-06',설치기사명:'박재현',설치기사ID:'T20187'},{고객명:'박지훈',고객주소:'서울 마포구 합정동 87-3',제품모델:'LG DIOS R-H814HTBS',통문일자:'2026-06-13',설치기사명:'최민호',설치기사ID:'T19922'}];
 
-function load(){
+async function load(){
   try{
-    const ld=(k,def)=>{const v=localStorage.getItem(k);return v?JSON.parse(v):def;};
     defData();
-    clients=ld('cfg_clients',clients);insCompanies=ld('cfg_ins',insCompanies);
-    clientMapping=ld('cfg_map',clientMapping);assignees=ld('cfg_asgn',assignees);
-    accidentTypes=ld('cfg_atypes',accidentTypes);productGroups=ld('cfg_pgroups',productGroups);productCats=ld('cfg_pcats',productCats);
-    claims=ld('cls_v8',claims);epRecs=ld('ep_v8',epRecs);
-    insFiles=ld('ins_files_v8',insFiles);templates=ld('tpl_v8',templates);
-    consumerCases=ld('ca_v1',consumerCases);lawsuits=ld('suit_v1',lawsuits);
-    const m=ld('ep_col_map',{});
+    // Firestore에서 로드 (없으면 기본값 사용)
+    clients      = await fsGet('cfg_clients', clients);
+    insCompanies = await fsGet('cfg_ins', insCompanies);
+    clientMapping= await fsGet('cfg_map', clientMapping);
+    assignees    = await fsGet('cfg_asgn', assignees);
+    accidentTypes= await fsGet('cfg_atypes', accidentTypes);
+    productGroups= await fsGet('cfg_pgroups', productGroups);
+    productCats  = await fsGet('cfg_pcats', productCats);
+    claims       = await fsGet('cls_v8', claims);
+    epRecs       = await fsGet('ep_v8', epRecs);
+    insFiles     = await fsGet('ins_files_v8', insFiles);
+    templates    = await fsGet('tpl_v8', templates);
+    consumerCases= await fsGet('ca_v1', consumerCases);
+    lawsuits     = await fsGet('suit_v1', lawsuits);
+    const m      = await fsGet('ep_col_map', {});
     ['name','addr','prod','idate','tname','tid'].forEach(k=>{if(m[k]&&$('m-'+k))$('m-'+k).value=m[k];});
-  }catch(e){defData();}
+  }catch(e){console.error('로드 오류:',e);defData();}
 }
-function persist(){
+async function persist(){
   try{
-    const sv=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
-    sv('cfg_clients',clients);sv('cfg_ins',insCompanies);sv('cfg_map',clientMapping);
-    sv('cfg_asgn',assignees);sv('cfg_atypes',accidentTypes);sv('cfg_pgroups',productGroups);sv('cfg_pcats',productCats);
-    sv('cls_v8',claims);sv('ep_v8',epRecs);sv('ins_files_v8',insFiles);sv('tpl_v8',templates);
-    sv('ca_v1',consumerCases);sv('suit_v1',lawsuits);
-  }catch(e){}
+    await Promise.all([
+      fsSet('cfg_clients', clients),
+      fsSet('cfg_ins', insCompanies),
+      fsSet('cfg_map', clientMapping),
+      fsSet('cfg_asgn', assignees),
+      fsSet('cfg_atypes', accidentTypes),
+      fsSet('cfg_pgroups', productGroups),
+      fsSet('cfg_pcats', productCats),
+      fsSet('cls_v8', claims),
+      fsSet('ep_v8', epRecs),
+      fsSet('ins_files_v8', insFiles),
+      fsSet('tpl_v8', templates),
+      fsSet('ca_v1', consumerCases),
+      fsSet('suit_v1', lawsuits),
+    ]);
+  }catch(e){console.error('저장 오류:',e);}
 }
+
 
 /* ══════════════════════════════════════════════
    HELPERS
@@ -1281,11 +1327,17 @@ function deleteSuit(id){lawsuits=lawsuits.filter(x=>x.id!==id);persist();renderS
 /* ══════════════════════════════════════════════
    INIT
 ══════════════════════════════════════════════ */
-document.addEventListener('DOMContentLoaded',function(){
-  load();
+document.addEventListener('DOMContentLoaded', async function(){
+  // 로딩 표시
+  document.body.innerHTML += '<div id="loading-overlay" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(255,255,255,0.9);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;font-family:sans-serif;"><div style="font-size:18px;font-weight:500;color:#185FA5;margin-bottom:12px;">데이터 불러오는 중...</div><div style="font-size:13px;color:#888;">Firebase 연결 중</div></div>';
+
+  await load();
+
+  // 로딩 제거
+  const ov=document.getElementById('loading-overlay');if(ov)ov.remove();
+
   if(apiKey){$('api-key-input').value=apiKey;$('api-key-status').textContent='저장됨 ✓';}
   _initHandlers();
   setQuick('all');
   updateInsBadge();
 });
-

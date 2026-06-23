@@ -2,9 +2,6 @@
 /* ══════════════════════════════════════════════
    FIREBASE 초기화
 ══════════════════════════════════════════════ */
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, getDoc, setDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-
 const firebaseConfig = {
   apiKey: "AIzaSyAy6HPR4oihXAZq_1oLdlfH_Ol2LRfwzAo",
   authDomain: "lx-claim.firebaseapp.com",
@@ -13,20 +10,24 @@ const firebaseConfig = {
   messagingSenderId: "64279299234",
   appId: "1:64279299234:web:67237c233f372e99f043fb"
 };
-const fbApp = initializeApp(firebaseConfig);
-const db = getFirestore(fbApp);
 
-/* Firestore 저장/로드 헬퍼 */
-async function fsGet(docId, def){
+let db;
+function initFirebase(){
   try{
-    const snap = await getDoc(doc(db,'lx-claim',docId));
-    return snap.exists() ? snap.data().value : def;
+    firebase.initializeApp(firebaseConfig);
+    db=firebase.firestore();
+  }catch(e){console.error('Firebase 초기화 오류:',e);}
+}
+
+async function fsGet(docId,def){
+  try{
+    const snap=await db.collection('lx-claim').doc(docId).get();
+    return snap.exists?snap.data().value:def;
   }catch(e){return def;}
 }
-async function fsSet(docId, value){
-  try{
-    await setDoc(doc(db,'lx-claim',docId), {value});
-  }catch(e){console.error('Firestore 저장 오류:',e);}
+async function fsSet(docId,value){
+  try{await db.collection('lx-claim').doc(docId).set({value});}
+  catch(e){console.error('Firestore 저장 오류:',e);}
 }
 
 
@@ -739,14 +740,23 @@ function uploadInsFile(input,insId){
 /* 자동 클레임 생성 미리보기 */
 let _pendingAutoRows=[], _pendingAutoInsId='';
 function showAutoCreatePreview(parsed, insId){
+  // 기존 클레임에 없는 건만 필터
+  // 1) 보험사 접수번호가 있고 이미 등록된 건 제외
+  // 2) 고객명+설치일로 매칭되는 건 제외
   const existingNos=new Set(claims.map(c=>c.insNo).filter(Boolean));
-  const newRows=parsed.filter(r=>r.접수번호&&!existingNos.has(r.접수번호)&&!matchInsRow(r));
+  const newRows=parsed.filter(r=>{
+    // 보험사 접수번호로 중복 체크
+    if(r.접수번호&&existingNos.has(r.접수번호))return false;
+    // 고객명+설치일로 매칭 체크
+    if(matchInsRow(r))return false;
+    return true;
+  });
   if(!newRows.length){
     const panel=$('ins-detail-panel');
     if(panel){
       const notice=document.createElement('div');
       notice.style.cssText='margin-top:10px;padding:9px 13px;background:#EAF3DE;border:0.5px solid #C0DD97;border-radius:8px;font-size:13px;color:#3B6D11;';
-      notice.textContent=`✓ 새로 생성할 클레임 없음 — 전체 ${parsed.length}건 기존 매칭`;
+      notice.textContent=`✓ 새로 생성할 클레임 없음 — 전체 ${parsed.length}건 중 기존 매칭 ${parsed.length-newRows.length}건`;
       panel.prepend(notice);
       setTimeout(()=>notice.remove(),4000);
     }
@@ -1470,6 +1480,7 @@ function deleteSuit(id){lawsuits=lawsuits.filter(x=>x.id!==id);persist();renderS
    INIT
 ══════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', async function(){
+  initFirebase();
   // 로딩 표시
   document.body.innerHTML += '<div id="loading-overlay" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(255,255,255,0.9);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;font-family:sans-serif;"><div style="font-size:18px;font-weight:500;color:#185FA5;margin-bottom:12px;">데이터 불러오는 중...</div><div style="font-size:13px;color:#888;">Firebase 연결 중</div></div>';
 

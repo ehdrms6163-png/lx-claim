@@ -610,6 +610,8 @@ function _initHandlers(){
     }
   });
   document.addEventListener('change',e=>{
+    // 보험사 파일 업로드
+    if(e.target.dataset&&e.target.dataset.insUpload){uploadInsFile(e.target,e.target.dataset.insUpload);return;}
     // data-map-id (고객사-보험사 매핑 select)
     if(e.target.dataset&&e.target.dataset.mapId){clientMapping[e.target.dataset.mapId]=e.target.value;return;}
     let el=e.target;
@@ -681,7 +683,7 @@ function renderInsDetail(id){
       <div style="margin-left:auto;display:flex;gap:6px;">
         <button class="btn sm suc" data-trigger-upload="${id}"><svg class="ico ico-md"><use href="#ico-upload"/></svg> Excel 업로드</button>
         <button class="btn sm" data-load-sample="${id}"><svg class="ico ico-md"><use href="#ico-table"/></svg> 샘플</button>
-        <input type="file" id="ins-file-${id}" accept=".xlsx,.xls,.csv" style="display:none" onchange="uploadInsFile(this,'${id}')">
+        <input type="file" id="ins-file-${id}" accept=".xlsx,.xls,.csv" style="display:none" data-ins-upload="${id}">
       </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;margin-bottom:13px;">

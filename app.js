@@ -743,7 +743,7 @@ function uploadInsFile(input,insId){
     try{
       let rows;
       if(isCSV){const lines=e.target.result.split('\n').filter(l=>l.trim());const hdr=lines[0].split(',').map(h=>h.replace(/"/g,'').trim());rows=lines.slice(1).map(line=>{const cols=line.split(',').map(v=>v.replace(/"/g,'').trim());const obj={};hdr.forEach((h,i)=>obj[h]=cols[i]||'');return obj;});}
-      else{const wb=XLSX.read(e.target.result,{type:'array'});const ws=wb.Sheets[wb.SheetNames[0]];rows=XLSX.utils.sheet_to_json(ws,{defval:''});}
+      else{const wb=XLSX.read(e.target.result,{type:'array',cellDates:true});const ws=wb.Sheets[wb.SheetNames[0]];rows=XLSX.utils.sheet_to_json(ws,{defval:'',raw:false});}
       const parsed=rows.map(parseInsRow).filter(r=>r.접수번호||r.고객명);
       console.log('[디버그] 엑셀 첫행 키:', rows[0]?Object.keys(rows[0]):[]);
       console.log('[디버그] 엑셀 첫행 원본:', rows[0]);

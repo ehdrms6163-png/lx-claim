@@ -199,15 +199,23 @@ function normalizeDate(raw){
 }
 function normalizeNum(v){if(!v&&v!==0)return 0;if(typeof v==='number')return v;return parseFloat(String(v).replace(/[,\s원]/g,''))||0;}
 function parseInsRow(row){
-  const g=(...keys)=>{for(const k of keys){if(row[k]!==undefined&&row[k]!==null&&row[k]!=='')return String(row[k]).trim();}return '';};
-  // 손해사정 담당자 파싱 (이름+직급/연락처 형식)
-  const adjRaw=g('손해사정 담당자','담당자','사정인');
+  const rowKeys=Object.keys(row);
+  // 공백/줄바꿈 무시하고 컬럼명 매칭
+  const g=(...candidates)=>{
+    for(const c of candidates){
+      if(row[c]!==undefined&&row[c]!==null&&row[c]!=='')return String(row[c]).trim();
+      const norm=c.replace(/[\s\n\r]/g,'');
+      const found=rowKeys.find(k=>k.replace(/[\s\n\r]/g,'')===norm);
+      if(found&&row[found]!==undefined&&row[found]!==null&&row[found]!=='')return String(row[found]).trim();
+    }
+    return '';
+  };
+  // 손해사정 담당자 파싱
+  const adjRaw=g('손해사정 담당자','담당자');
   const adjLines=adjRaw.split(/[\n\r\/]/).map(s=>s.trim()).filter(Boolean);
-  const adjName=adjLines[0]||'';
-  const adjPhone=adjLines[1]||'';
   return {
     접수번호:g('접수번호','PL접수번호'),
-    고객명:g('고객명(연락처)','고객명','성명'),
+    고객명:g('고객명\n(연락처)','고객명(연락처)','고객명','성명'),
     주소:g('주소','설치주소','고객주소'),
     피해내용:g('피해내용','손해내용'),
     대구분:g('대구분','대분류'),
@@ -215,10 +223,10 @@ function parseInsRow(row){
     설치일:g('설치일','설치일자','통문일자'),
     사고일:g('사고일'),
     접수일:g('접수일','사고접수일'),
-    지급보험금:normalizeNum(row['지급보험금']||row[' 지급보험금 ']||0),
-    조사비:normalizeNum(row['조사비']||row[' 조사비 ']||0),
-    추산보험금OS:normalizeNum(row['추산보험금(O/S)']||row[' 추산보험금(O/S) ']||0),
-    조사비OS:normalizeNum(row['조사비(O/S)']||row[' 조사비(O/S) ']||0),
+    지급보험금:normalizeNum(row[' 지급보험금 ']||row['지급보험금']||0),
+    조사비:normalizeNum(row[' 조사비 ']||row['조사비']||0),
+    추산보험금OS:normalizeNum(row[' 추산보험금(O/S) ']||row['추산보험금(O/S)']||0),
+    조사비OS:normalizeNum(row[' 조사비(O/S) ']||row['조사비(O/S)']||0),
     처리구분:g('처리구분'),
     협력업체:g('협력업체'),
     설치기사:g('설치기사','설치기사/차량번호'),
@@ -226,8 +234,8 @@ function parseInsRow(row){
     원인2:g('원인2'),
     귀책여부:g('설치 귀책 여부','귀책여부'),
     평가반영:g('협력업체\n평가 반영 여부','협력업체 평가 반영 여부','평가반영여부'),
-    손해사정담당자:adjName,
-    손해사정연락처:adjPhone,
+    손해사정담당자:adjLines[0]||'',
+    손해사정연락처:adjLines[1]||'',
   };
 }
 function updateInsBadge(){

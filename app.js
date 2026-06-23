@@ -428,7 +428,7 @@ function renderList(){
   const f=claims.filter(c=>{const m=!q||(c.name+c.id+c.desc+(c.tname||'')+(c.client||'')+c.id).toLowerCase().includes(q.toLowerCase());return m&&(!st||c.status===st)&&(!ty||c.type===ty)&&(!cs||c.client===cs);});
   $('claim-list').innerHTML=f.length?f.map(c=>{
     const amtStr=c.amount?c.amount.toLocaleString('ko-KR')+'원':'-';
-    return `<div class="tr" style="grid-template-columns:130px 50px 65px 110px 1fr 60px 60px 60px 88px;cursor:pointer;" data-claim-id="${c.id}">
+    return `<div class="tr" style="grid-template-columns:120px 45px 60px 100px 1fr 55px 55px 90px 85px;cursor:pointer;" data-claim-id="${c.id}">
       <span style="font-family:var(--mono);font-size:10px;color:var(--blue);">${c.id}</span>
       <span style="font-size:11px;color:var(--tx2);">${c.groupCode||'-'}</span>
       <span style="font-size:11px;">${c.client||'-'}</span>
@@ -437,7 +437,7 @@ function renderList(){
       <span style="font-size:11px;">${c.type}</span>
       <span><span class="bdg b-${c.status}">${c.status}</span></span>
       <span style="font-size:11px;">${amtStr}</span>
-      <span style="font-size:11px;">${c.insDate||c.date||'-'}</span>
+      <span style="font-size:11px;">${c.insDate||'-'}</span>
     </div>`;
   }).join(''):'<div class="empty">검색 결과 없음</div>';
 }
@@ -648,8 +648,19 @@ function _initHandlers(){
       el=el.parentElement;
     }
   });
-  // 전체 클레임 삭제 버튼
-  const bcc=$('btn-clear-claims');
+  // 전체 클레임 삭제 버튼 (설정탭 + 목록탭)
+  ['btn-clear-claims','btn-clear-claims-list'].forEach(id=>{
+    const bcc=$(id);
+    if(bcc)bcc.addEventListener('click',()=>{
+      if(claims.length===0)return;
+      claims=[];persist();renderDash();renderList();updateInsBadge();
+      const msg=document.createElement('div');
+      msg.style.cssText='position:fixed;bottom:24px;right:24px;padding:12px 18px;background:var(--red);color:#fff;border-radius:10px;font-size:13px;font-weight:500;z-index:400;';
+      msg.textContent='✓ 클레임 전체 삭제 완료';
+      document.body.appendChild(msg);setTimeout(()=>msg.remove(),3000);
+    });
+  });
+
   if(bcc)bcc.addEventListener('click',()=>{
     if(claims.length===0){return;}
     claims=[];persist();renderDash();renderList();updateInsBadge();

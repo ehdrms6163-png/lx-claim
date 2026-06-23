@@ -416,7 +416,7 @@ body{font-family:var(--font);font-size:14px;color:var(--tx1);background:var(--bg
 
 <!-- ════════════════════ LIST ════════════════════ -->
 <div class="sec" id="s-list">
-  <div class="sh"><h2>클레임 목록</h2><button class="btn pri" data-fn="navRegister3"><svg class="ico ico-md"><use href="#ico-plus"/></svg> 신규 접수</button></div>
+  <div class="sh"><h2>클레임 목록</h2><button class="btn dng sm" id="btn-clear-claims-list" style="margin-right:8px;">전체 삭제</button><button class="btn pri" data-fn="navRegister3"><svg class="ico ico-md"><use href="#ico-plus"/></svg> 신규 접수</button></div>
   <div class="tb2">
     <input type="text" id="s-q" placeholder="접수번호, 고객명, 내용, 기사명 검색..." data-fni="renderList">
     <select id="s-st" data-fnc="renderList"><option value="">전체 상태</option><option>접수</option><option>검토</option><option>처리</option><option>종결</option><option>보류</option></select>
@@ -424,7 +424,7 @@ body{font-family:var(--font);font-size:14px;color:var(--tx1);background:var(--bg
     <select id="s-cs" data-fnc="renderList"><option value="">전체 고객사</option></select>
   </div>
   <div class="tbl">
-    <div class="th" style="grid-template-columns:130px 50px 65px 110px 1fr 60px 60px 60px 88px;"><span>접수번호</span><span>대구분</span><span>고객사</span><span>보험사접수번호</span><span>고객명/내용</span><span>유형</span><span>상태</span><span>추산O/S</span><span>보험접수일</span></div>
+    <div class="th" style="grid-template-columns:120px 45px 60px 100px 1fr 55px 55px 90px 85px;"><span>접수번호</span><span>대구분</span><span>고객사</span><span>보험접수번호</span><span>고객명/내용</span><span>유형</span><span>상태</span><span>추산O/S</span><span>보험접수일</span></div>
     <div id="claim-list"></div>
   </div>
 </div>

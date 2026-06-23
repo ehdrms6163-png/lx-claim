@@ -750,8 +750,6 @@ function showAutoCreatePreview(parsed, insId){
     </div>`).join('');
   $('auto-create-modal').classList.add('open');
 }
-  document.body.appendChild(modal);
-}
 
 /* 자동 클레임 생성 실행 */
 function autoCreateClaims(newRows, insId){

@@ -878,92 +878,92 @@ let _prefilling=false;
 function prefillFromInsRow(r){
   if(typeof r==='string')r=JSON.parse(r);
 
-  // 1) 탭 전환만 직접 처리 (resetForm 호출 없이)
+  // 1) 탭 전환
   document.querySelectorAll('.sec').forEach(s=>s.classList.remove('active'));
   document.querySelectorAll('.nb').forEach(b=>b.classList.remove('active'));
   $('s-register').classList.add('active');
   const regBtn=document.querySelector('.nb:nth-child(3)');
   if(regBtn)regBtn.classList.add('active');
 
-  // 2) 드롭다운 초기화 (resetForm 없이 직접)
+  // 2) 드롭다운 초기화
   editId=null;
   $('form-title').textContent='신규 클레임 접수';
   $('f-date').value=new Date().toISOString().slice(0,10);
   populateRegisterDropdowns();
 
-  // 3) 모든 값 세팅
-  $('f-name').value=(r.고객명||'').replace(/\(.*\)/,'').trim();
-  $('f-addr').value=r.주소||'';
-  $('f-tname').value=r.설치기사||'';
-  $('f-desc').value=r.피해내용||'';
-  $('f-note').value=`보험사 접수번호: ${r.접수번호||'-'}`;
-
-  // 통문일자 ← 설치일
-  if(r.설치일){
-    const nd=normalizeDate(String(r.설치일));
-    const el=$('f-idate');
-    if(el)el.value=nd||String(r.설치일).trim();
-    console.log('[통문일자]', r.설치일, '->', nd);
-  }
-  // 보험 접수일 ← 엑셀 접수일
-  if(r.접수일){
-    const nd=normalizeDate(String(r.접수일));
-    const el=$('f-ins-date');if(el)el.value=nd||String(r.접수일).trim();
-  }
-  // 손해액
-  const amt=(r.지급보험금||0)||(r.추산보험금OS||0);
-  if(amt){const el=$('f-amt');if(el)el.value=amt;}
-
-  // 귀책여부
-  const liabEl=$('f-liability');
-  if(liabEl&&r.귀책여부){
-    const lv=r.귀책여부.trim();
-    liabEl.value=['귀책','비귀책','확인중','분쟁중'].includes(lv)?lv:'확인중';
-  }
-  // 평가반영여부
-  const evalEl=$('f-eval');
-  if(evalEl&&r.평가반영){
-    const ev=r.평가반영.trim();
-    if(ev.includes('미반영'))evalEl.value='미반영';
-    else if(ev.includes('반영'))evalEl.value='반영';
-    else if(ev.includes('검토'))evalEl.value='검토중';
-  }
-  // 대구분 → 대분류
-  const grp=mapDaeguBun(r.대구분);
-  const pgEl=$('f-pgroup');
-  if(pgEl){
-    pgEl.innerHTML='<option value="">선택</option>'+productGroups.map(g=>`<option value="${g.id}">${g.name} (${g.code})</option>`).join('');
-    if(grp){pgEl.value=grp.id;onPgroupChange();}
-  }
-  // 사고유형
-  const t=(r.원인1||'')+(r.원인2||'');
-  const atype=accidentTypes.find(x=>t.includes(x.name));
-  if(atype&&$('f-type'))$('f-type').value=atype.code;
-  // 고객사 역매핑
-  const insId=r._insId;
-  if(insId){
-    const cEntry=Object.entries(clientMapping).find(([k,v])=>v===insId);
-    if(cEntry&&$('f-cs')){$('f-cs').value=cEntry[0];onClientChange();}
-  }
-  // 제품군 (onPgroupChange 드롭다운 렌더 후 선택)
+  // 3) 값 세팅 — populateRegisterDropdowns 완료 후 실행
   setTimeout(()=>{
-    const pcat=mapJeumunGubun(r.제품구분);
-    const pcEl=$('f-pcat');
-    if(pcEl&&pcat){
-      const opt=[...pcEl.options].find(o=>o.value===pcat.code);
-      if(opt)pcEl.value=pcat.code;
-      else{
-        const no=document.createElement('option');
-        no.value=pcat.code;no.textContent=`${pcat.name} (${pcat.code})`;
-        pcEl.appendChild(no);pcEl.value=pcat.code;
-      }
-    }
-    updateIdPreview();
-  },50);
+    $('f-name').value=(r.고객명||'').replace(/\(.*\)/,'').trim();
+    $('f-addr').value=r.주소||'';
+    $('f-tname').value=r.설치기사||'';
+    $('f-desc').value=r.피해내용||'';
+    $('f-note').value=`보험사 접수번호: ${r.접수번호||'-'}`;
 
-  // 자동입력 배너
-  const banner=$('autofill-banner');
-  if(banner){banner.style.display='flex';$('autofill-msg').textContent=`보험사 데이터 자동 입력 — ${r.접수번호||r.피해내용||''}`;}
+    // 통문일자 ← 설치일
+    if(r.설치일){
+      const nd=normalizeDate(String(r.설치일));
+      const el=$('f-idate');
+      if(el)el.value=nd||String(r.설치일).trim();
+    }
+    // 보험 접수일 ← 엑셀 접수일
+    if(r.접수일){
+      const nd=normalizeDate(String(r.접수일));
+      const el=$('f-ins-date');if(el)el.value=nd||String(r.접수일).trim();
+    }
+    // 손해액
+    const amt=(r.지급보험금||0)||(r.추산보험금OS||0);
+    if(amt){const el=$('f-amt');if(el)el.value=amt;}
+    // 귀책여부
+    const liabEl=$('f-liability');
+    if(liabEl&&r.귀책여부){
+      const lv=r.귀책여부.trim();
+      liabEl.value=['귀책','비귀책','확인중','분쟁중'].includes(lv)?lv:'확인중';
+    }
+    // 평가반영여부
+    const evalEl=$('f-eval');
+    if(evalEl&&r.평가반영){
+      const ev=r.평가반영.trim();
+      if(ev.includes('미반영'))evalEl.value='미반영';
+      else if(ev.includes('반영'))evalEl.value='반영';
+      else if(ev.includes('검토'))evalEl.value='검토중';
+    }
+    // 대구분 → 대분류
+    const grp=mapDaeguBun(r.대구분);
+    const pgEl=$('f-pgroup');
+    if(pgEl){
+      pgEl.innerHTML='<option value="">선택</option>'+productGroups.map(g=>`<option value="${g.id}">${g.name} (${g.code})</option>`).join('');
+      if(grp){pgEl.value=grp.id;onPgroupChange();}
+    }
+    // 사고유형
+    const t=(r.원인1||'')+(r.원인2||'');
+    const atype=accidentTypes.find(x=>t.includes(x.name));
+    if(atype&&$('f-type'))$('f-type').value=atype.code;
+    // 고객사 역매핑
+    const insId=r._insId;
+    if(insId){
+      const cEntry=Object.entries(clientMapping).find(([k,v])=>v===insId);
+      if(cEntry&&$('f-cs')){$('f-cs').value=cEntry[0];onClientChange();}
+    }
+    // 제품군
+    setTimeout(()=>{
+      const pcat=mapJeumunGubun(r.제품구분);
+      const pcEl=$('f-pcat');
+      if(pcEl&&pcat){
+        const opt=[...pcEl.options].find(o=>o.value===pcat.code);
+        if(opt)pcEl.value=pcat.code;
+        else{const no=document.createElement('option');no.value=pcat.code;no.textContent=`${pcat.name} (${pcat.code})`;pcEl.appendChild(no);pcEl.value=pcat.code;}
+      }
+      updateIdPreview();
+
+      // 통문일자/보험접수일 다시 한번 세팅 (다른 초기화가 덮어쓸 경우 대비)
+      if(r.설치일){const nd=normalizeDate(String(r.설치일));const el=$('f-idate');if(el)el.value=nd||String(r.설치일).trim();}
+      if(r.접수일){const nd=normalizeDate(String(r.접수일));const el=$('f-ins-date');if(el)el.value=nd||String(r.접수일).trim();}
+    },100);
+
+    // 자동입력 배너
+    const banner=$('autofill-banner');
+    if(banner){banner.style.display='flex';$('autofill-msg').textContent=`보험사 데이터 자동 입력 — ${r.접수번호||r.피해내용||''}`;}
+  },50);
 }
 function deleteClaim(){if(!curDetail)return;claims=claims.filter(c=>c.id!==curDetail.id);persist();nav('list',document.querySelector('.nb:nth-child(2)'));}
 

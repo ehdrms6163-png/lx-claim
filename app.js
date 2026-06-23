@@ -650,15 +650,17 @@ function _initHandlers(){
   });
   // 전체 클레임 삭제 버튼 (설정탭 + 목록탭)
   ['btn-clear-claims','btn-clear-claims-list'].forEach(id=>{
-    const bcc=$(id);
-    if(bcc)bcc.addEventListener('click',()=>{
-      if(claims.length===0)return;
-      claims=[];persist();renderDash();renderList();updateInsBadge();
-      const msg=document.createElement('div');
-      msg.style.cssText='position:fixed;bottom:24px;right:24px;padding:12px 18px;background:var(--red);color:#fff;border-radius:10px;font-size:13px;font-weight:500;z-index:400;';
-      msg.textContent='✓ 클레임 전체 삭제 완료';
-      document.body.appendChild(msg);setTimeout(()=>msg.remove(),3000);
-    });
+    try{
+      const bcc=$(id);
+      if(bcc)bcc.addEventListener('click',()=>{
+        if(claims.length===0)return;
+        claims=[];persist();renderDash();renderList();updateInsBadge();
+        const msg=document.createElement('div');
+        msg.style.cssText='position:fixed;bottom:24px;right:24px;padding:12px 18px;background:var(--red);color:#fff;border-radius:10px;font-size:13px;font-weight:500;z-index:400;';
+        msg.textContent='✓ 클레임 전체 삭제 완료';
+        document.body.appendChild(msg);setTimeout(()=>msg.remove(),3000);
+      });
+    }catch(e){console.log('버튼 없음:',id);}
   });
 
   const amc=$('auto-modal-close');if(amc)amc.addEventListener('click',()=>$('auto-create-modal').classList.remove('open'));
@@ -760,7 +762,10 @@ function uploadInsFile(input,insId){
     try{
       let rows;
       if(isCSV){const lines=e.target.result.split('\n').filter(l=>l.trim());const hdr=lines[0].split(',').map(h=>h.replace(/"/g,'').trim());rows=lines.slice(1).map(line=>{const cols=line.split(',').map(v=>v.replace(/"/g,'').trim());const obj={};hdr.forEach((h,i)=>obj[h]=cols[i]||'');return obj;});}
-      else{const wb=XLSX.read(e.target.result,{type:'array',cellDates:true});const ws=wb.Sheets[wb.SheetNames[0]];rows=XLSX.utils.sheet_to_json(ws,{defval:'',raw:false});}
+      else{const wb=XLSX.read(e.target.result,{type:'array',cellDates:true});const ws=wb.Sheets[wb.SheetNames[0]];rows=XLSX.utils.sheet_to_json(ws,{defval:'',raw:true});
+        // 날짜 셀을 YYYY-MM-DD 문자열로 변환
+        rows=rows.map(row=>{const r={};Object.keys(row).forEach(k=>{const v=row[k];if(v instanceof Date){r[k]=v.toISOString().slice(0,10);}else{r[k]=v;}});return r;});
+      }
       const parsed=rows.map(parseInsRow).filter(r=>r.접수번호||r.고객명);
       console.log('[디버그] 엑셀 첫행 키:', rows[0]?Object.keys(rows[0]):[]);
       console.log('[디버그] 엑셀 첫행 원본:', rows[0]);

@@ -661,14 +661,6 @@ function _initHandlers(){
     });
   });
 
-  if(bcc)bcc.addEventListener('click',()=>{
-    if(claims.length===0){return;}
-    claims=[];persist();renderDash();renderList();updateInsBadge();
-    const msg=document.createElement('div');
-    msg.style.cssText='position:fixed;bottom:24px;right:24px;padding:12px 18px;background:var(--red);color:#fff;border-radius:10px;font-size:13px;font-weight:500;z-index:400;';
-    msg.textContent='✓ 클레임 전체 삭제 완료';
-    document.body.appendChild(msg);setTimeout(()=>msg.remove(),3000);
-  });
   const amc=$('auto-modal-close');if(amc)amc.addEventListener('click',()=>$('auto-create-modal').classList.remove('open'));
   const amca=$('auto-modal-cancel');if(amca)amca.addEventListener('click',()=>$('auto-create-modal').classList.remove('open'));
   const amco=$('auto-modal-confirm');if(amco)amco.addEventListener('click',()=>{autoCreateClaims(_pendingAutoRows,_pendingAutoInsId);$('auto-create-modal').classList.remove('open');});
@@ -819,11 +811,11 @@ function showAutoCreatePreview(parsed, insId){
   $('auto-modal-desc').innerHTML=`아래 <b style="color:#185FA5;">${newRows.length}건</b>이 새로 생성됩니다. 확인 후 등록해주세요.`;
   $('auto-modal-confirm').textContent=`${newRows.length}건 클레임 등록`;
   $('auto-modal-list').innerHTML=newRows.map(r=>`
-    <div class="tr" style="grid-template-columns:110px 80px 80px 1fr 80px 80px 130px;cursor:default;">
-      <span style="font-family:var(--mono);font-size:11px;color:var(--blue);">${r.접수번호}</span>
+    <div class="tr" style="grid-template-columns:130px 80px 80px 160px 80px 80px 130px;cursor:default;">
+      <span style="font-family:var(--mono);font-size:11px;color:var(--blue);">${r.접수번호||'-'}</span>
       <span style="font-size:12px;">${r.대구분||'-'}</span>
       <span style="font-size:12px;">${r.제품구분||'-'}</span>
-      <span><b style="font-weight:500;">${(r.고객명||'').replace(/\(.*\)/,'')}</b><br><span style="color:var(--tx2);font-size:11px;">${(r.주소||'').slice(0,22)}</span></span>
+      <span><b style="font-weight:500;">${(r.고객명||'').replace(/\(.*\)/,'')}</b><br><span style="color:var(--tx2);font-size:11px;">${(r.주소||'').slice(0,20)}</span></span>
       <span style="font-size:12px;">${r.설치일||'-'}</span>
       <span style="font-size:12px;">${r.접수일||'-'}</span>
       <span style="font-size:11px;">${r.손해사정담당자||'-'}${r.손해사정연락처?`<br><span style="color:var(--tx2);">${r.손해사정연락처}</span>`:''}</span>

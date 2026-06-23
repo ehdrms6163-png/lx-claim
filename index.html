@@ -452,16 +452,19 @@ body{font-family:var(--font);font-size:14px;color:var(--tx1);background:var(--bg
       <div class="fi"><label>고객명 *</label><input type="text" id="f-name" placeholder="홍길동"></div>
       <div class="fi"><label>연락처</label><input type="text" id="f-phone" placeholder="010-0000-0000"></div>
       <div class="fi"><label>주소</label><input type="text" id="f-addr" placeholder="설치 주소"></div>
-      <div class="fi"><label>대분류</label><select id="f-pgroup" data-fnc="onPgroupChange"><option value="">선택</option></select></div>
-      <div class="fi"><label>제품군</label><select id="f-pcat" data-fnc="updateIdPreview"><option value="">선택</option></select></div>
-      <div class="fi"><label>제품/모델명</label><input type="text" id="f-product" placeholder="LG ThinQ FQ18VDWSA2"></div>
+      <div class="fi"><label>대구분</label><select id="f-pgroup" data-fnc="onPgroupChange"><option value="">선택</option></select></div>
+      <div class="fi"><label>제품구분</label><select id="f-pcat" data-fnc="updateIdPreview"><option value="">선택</option></select></div>
+      <div class="fi"><label>설치 주문번호</label><input type="text" id="f-product" placeholder="설치 주문번호"></div>
       <div class="fi"><label>사고 유형</label><select id="f-type" data-fnc="updateIdPreview"><option value="">선택</option></select></div>
       <div class="fi"><label>설치일자</label><input type="date" id="f-idate"></div>
       <div class="fi"><label>설치기사 / 기사ID</label>
         <div style="display:flex;gap:6px;"><input type="text" id="f-tname" placeholder="기사 이름" style="flex:1;"><input type="text" id="f-tid" placeholder="기사ID" style="width:90px;"></div>
       </div>
       <div class="fi"><label>담당자</label><select id="f-asgn"><option value="">선택</option></select></div>
-      <div class="fi"><label>예상 손해액 (원)</label><input type="number" id="f-amt" placeholder="0"></div>
+      <div class="fi"><label>추산보험금 O/S (원)</label><input type="number" id="f-amt" placeholder="0"></div>
+      <div class="fi"><label>조사비 O/S (원)</label><input type="number" id="f-survey" placeholder="0"></div>
+      <div class="fi"><label>지급보험금 (원)</label><input type="number" id="f-paid" placeholder="0"></div>
+      <div class="fi"><label>물류센터</label><input type="text" id="f-logistics" placeholder="물류센터명"></div>
       <div class="fi"><label>보험 접수일 <span style="font-size:11px;color:var(--blue);">(엑셀 자동)</span></label><input type="date" id="f-ins-date" placeholder="보험사 접수일"></div>
       <div class="fi"><label>클레임 입력일 <span style="font-size:11px;color:var(--green);">(오늘 자동)</span></label><input type="date" id="f-date"></div>
       <div class="fi full"><label>접수번호 (자동생성)</label>

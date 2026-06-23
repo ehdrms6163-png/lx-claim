@@ -175,12 +175,12 @@ function updateIdPreview(){
 /* 엑셀 대구분 → 앱 대분류 매핑 */
 function mapDaeguBun(raw){
   if(!raw)return null;
-  const s=raw.trim();
-  if(s.includes('에어컨')&&(s.includes('신규')||s.includes('N')))return productGroups.find(x=>x.code==='ARN')||null;
-  if(s.includes('에어컨')&&(s.includes('이전')||s.includes('R')))return productGroups.find(x=>x.code==='ARR')||null;
-  if(s.includes('에어컨'))return productGroups.find(x=>x.code==='ARN')||null; // 구분 없으면 신규로
+  const s=String(raw).trim().replace(/\s/g,'');
+  if(s.includes('에어컨')&&(s.includes('신규')||s.includes('(신규)')||s.includes('N)')))return productGroups.find(x=>x.code==='ARN')||null;
+  if(s.includes('에어컨')&&(s.includes('이전')||s.includes('(이전)')||s.includes('R)')))return productGroups.find(x=>x.code==='ARR')||null;
+  if(s.includes('에어컨'))return productGroups.find(x=>x.code==='ARN')||null;
   if(s.includes('가정설치')||s==='가정')return productGroups.find(x=>x.code==='HA')||null;
-  if(s.includes('정수기')||s.includes('빌트인')||s.includes('WB'))return productGroups.find(x=>x.code==='WB')||null;
+  if(s.includes('정수기')||s.includes('빌트인'))return productGroups.find(x=>x.code==='WB')||null;
   return null;
 }
 /* 엑셀 제품구분 → 앱 제품군 코드 매핑 */
@@ -250,6 +250,8 @@ function parseInsRow(row){
     평가반영:g('협력업체\n평가 반영 여부','협력업체 평가 반영 여부','평가반영여부'),
     손해사정담당자:adjLines[0]||'',
     손해사정연락처:adjLines[1]||'',
+    설치주문번호:g('설치 주문번호','설치주문번호'),
+    물류센터:g('물류센터'),
   };
 }
 function updateInsBadge(){
@@ -349,8 +351,8 @@ function renderDash(){
     if(c.pcat)byP[c.pcat]=(byP[c.pcat]||0)+1;
     if(c.status!=='종결')aAmt+=c.amount||0;
     estAmt+=c.amount||0;
-    paidAmt+=c.finalAmount||0;
-    osAmt+=c.osAmount||0;
+    paidAmt+=c.finalPayment||0;
+    osAmt+=c.survey||0;
   });
   const active=tot-(byS['종결']||0);
   $('stat-grid').innerHTML=`
@@ -372,11 +374,16 @@ function renderDash(){
   const totalOS=filteredInsRows.reduce((a,r)=>a+(r.추산보험금OS||0),0);
   const totalInv=filteredInsRows.reduce((a,r)=>a+(r.조사비||0)+(r.조사비OS||0),0);
   const ratio=estAmt>0?Math.round(totalPaid/estAmt*100):null;
+  // 클레임에서 직접 지급보험금 합산
+  const claimPaid=filtered.reduce((a,c)=>a+(c.finalPayment||0),0);
+  const claimOS=filtered.reduce((a,c)=>a+(c.amount||0),0);
+  const claimSurvey=filtered.reduce((a,c)=>a+(c.survey||0),0);
+  const lossRatio=claimOS>0?Math.round(claimPaid/claimOS*100):null;
   $('loss-grid').innerHTML=`
-    <div class="loss-card est"><div class="loss-label">예상 손해액 합계</div><div class="loss-val">${fmt만원(estAmt)}</div><div class="loss-sub">${tot}건</div></div>
-    <div class="loss-card paid"><div class="loss-label">지급보험금 합계</div><div class="loss-val">${fmt만원(totalPaid)}</div><div class="loss-sub">종결 기준</div></div>
-    <div class="loss-card os"><div class="loss-label">추산(O/S) 합계</div><div class="loss-val">${fmt만원(totalOS)}</div><div class="loss-sub">진행 중</div></div>
-    <div class="loss-card ${ratio===null?'est':ratio<=100?'ratio-good':'ratio-bad'}"><div class="loss-label">손해율 (지급/예상)</div><div class="loss-val">${ratio!==null?ratio+'%':'-'}</div><div class="loss-sub">조사비 ${fmt만원(totalInv)}</div></div>`;
+    <div class="loss-card os"><div class="loss-label">추산보험금 O/S</div><div class="loss-val">${fmt만원(claimOS)}</div><div class="loss-sub">${tot}건</div></div>
+    <div class="loss-card paid"><div class="loss-label">지급보험금</div><div class="loss-val">${fmt만원(claimPaid)}</div><div class="loss-sub">종결 기준</div></div>
+    <div class="loss-card inv"><div class="loss-label">조사비 O/S</div><div class="loss-val">${fmt만원(claimSurvey)}</div><div class="loss-sub">합계</div></div>
+    <div class="loss-card ${lossRatio===null?'est':lossRatio<=100?'ratio-good':'ratio-bad'}"><div class="loss-label">손해율 (지급/추산)</div><div class="loss-val">${lossRatio!==null?lossRatio+'%':'-'}</div><div class="loss-sub">지급÷추산</div></div>`;
 
   // 보험사 통계
   if(allRows.length){
@@ -475,7 +482,7 @@ function resetForm(){
   ['f-name','f-phone','f-addr','f-product','f-tname','f-tid','f-desc','f-note'].forEach(id=>{const e=$(id);if(e)e.value='';});
   const fd=$('f-date');if(fd)fd.value=new Date().toISOString().slice(0,10);
   // prefillFromInsRow 중에는 날짜/손해액 초기화 안 함
-  if(!_prefilling)['f-idate','f-amt','f-ins-date'].forEach(id=>{const e=$(id);if(e)e.value='';}); 
+  if(!_prefilling)['f-idate','f-amt','f-ins-date','f-survey','f-paid','f-logistics'].forEach(id=>{const e=$(id);if(e)e.value='';});  
   const fc=$('f-cs');if(fc)fc.value='';
   const fpg=$('f-pgroup');if(fpg)fpg.value='';
   const fp=$('f-pcat');if(fp)fp.innerHTML='<option value="">선택</option>';
@@ -499,7 +506,7 @@ function saveClaim(){
   const today=new Date().toISOString().slice(0,10);
   const grp=getGroupByPcat(pcode);
   const newId=editId||genId(new Date().getFullYear(),grp.code,pcode,tcode);
-  const d={clientId:cid,client:cName,pcat:pcode,pcatName:pcName,groupId:grp.id,groupCode:grp.code,groupName:grp.name,name,phone:$('f-phone').value,addr:$('f-addr').value,product:$('f-product').value,idate:$('f-idate').value,tname:$('f-tname').value,tid:$('f-tid').value,type:tName,typeCode:tcode,assignee:$('f-asgn').value,amount:Number($('f-amt').value)||0,insDate:$('f-ins-date').value||'',date:$('f-date').value||today,desc,note:$('f-note').value,insCoId,liability:$('f-liability').value||'',evalReflect:$('f-eval').value||''};
+  const d={clientId:cid,client:cName,pcat:pcode,pcatName:pcName,groupId:grp.id,groupCode:grp.code,groupName:grp.name,name,phone:$('f-phone').value,addr:$('f-addr').value,product:$('f-product').value,idate:$('f-idate').value,tname:$('f-tname').value,tid:$('f-tid').value,type:tName,typeCode:tcode,assignee:$('f-asgn').value,amount:Number($('f-amt').value)||0,survey:Number($('f-survey')?$('f-survey').value:0)||0,finalPayment:Number($('f-paid')?$('f-paid').value:0)||0,logistics:$('f-logistics')?$('f-logistics').value||'':'',insDate:$('f-ins-date').value||'',date:$('f-date').value||today,desc,note:$('f-note').value,insCoId,liability:$('f-liability').value||'',evalReflect:$('f-eval').value||''};
   if(editId){const c=claims.find(x=>x.id===editId);if(c){Object.assign(c,d);c.history=c.history||[];c.history.push({date:today,text:'정보 수정'});}editId=null;}
   else{claims.unshift({id:newId,...d,status:'접수',history:[{date:today,text:'클레임 접수'}]});}
   persist();nav('list',document.querySelector('.nb:nth-child(2)'));
@@ -852,6 +859,10 @@ function autoCreateClaims(newRows, insId){
       date:today,
       desc:r.피해내용||'-',
       note:`보험사 접수번호: ${r.접수번호} / 손해사정: ${r.손해사정담당자||'-'} ${r.손해사정연락처||''}`.trim(),
+      survey:r.조사비OS||0,
+      finalPayment:r.지급보험금||0,
+      logistics:r.물류센터||'',
+      orderNo:r.설치주문번호||'',
       insCoId:insId,
       insNo:r.접수번호,
       liability,evalReflect,
@@ -912,6 +923,16 @@ function prefillFromInsRow(r){
     $('f-tname').value=r.설치기사||'';
     $('f-desc').value=r.피해내용||'';
     $('f-note').value=`보험사 접수번호: ${r.접수번호||'-'}`;
+    // 설치 주문번호
+    const fprod=$('f-product');if(fprod)fprod.value=r.설치주문번호||'';
+    // 물류센터
+    const flog=$('f-logistics');if(flog)flog.value=r.물류센터||'';
+    // 추산보험금 O/S
+    const famt=$('f-amt');if(famt&&r.추산보험금OS)famt.value=r.추산보험금OS;
+    // 조사비 O/S
+    const fsurv=$('f-survey');if(fsurv&&r.조사비OS)fsurv.value=r.조사비OS;
+    // 지급보험금
+    const fpaid=$('f-paid');if(fpaid&&r.지급보험금)fpaid.value=r.지급보험금;
 
     // 통문일자 ← 설치일
     if(r.설치일){
@@ -1031,7 +1052,11 @@ function openDetail(id){
         <div class="dr"><span class="dk">사고유형</span><span>${c.type}</span></div>
         <div class="dr"><span class="dk">귀책여부</span><span style="font-weight:500;color:${c.liability==='귀책'?'var(--red)':c.liability==='비귀책'?'var(--green)':'var(--amber)'};">${c.liability||'-'}</span></div>
         <div class="dr"><span class="dk">평가반영</span><span>${c.evalReflect||'-'}</span></div>
-        <div class="dr"><span class="dk">손해액</span><span>${c.amount?c.amount.toLocaleString()+'원':'-'}</span></div>
+        <div class="dr"><span class="dk">추산보험금 O/S</span><span>${c.amount?c.amount.toLocaleString()+'원':'-'}</span></div>
+        ${c.survey?`<div class="dr"><span class="dk">조사비 O/S</span><span>${c.survey.toLocaleString()}원</span></div>`:''}
+        ${c.finalPayment?`<div class="dr"><span class="dk">지급보험금</span><span style="font-weight:500;color:var(--green);">${c.finalPayment.toLocaleString()}원</span></div>`:''}
+        ${c.logistics?`<div class="dr"><span class="dk">물류센터</span><span>${c.logistics}</span></div>`:''}
+        ${c.orderNo?`<div class="dr"><span class="dk">설치 주문번호</span><span style="font-family:var(--mono);font-size:12px;">${c.orderNo}</span></div>`:''}
         <div class="dr"><span class="dk">담당자</span><span>${c.assignee||'-'}</span></div>
         <div class="dr"><span class="dk">클레임 입력일</span><span>${c.date}</span></div>
         ${c.insDate?`<div class="dr"><span class="dk">보험 접수일</span><span style="color:var(--blue);">${c.insDate}</span></div>`:''}
@@ -1102,6 +1127,9 @@ function editClaim(){
   $('f-desc').value=c.desc;$('f-note').value=c.note||'';
   const fl=$('f-liability');if(fl)fl.value=c.liability||'';
   const fe=$('f-eval');if(fe)fe.value=c.evalReflect||'';
+  const fs=$('f-survey');if(fs)fs.value=c.survey||'';
+  const fp=$('f-paid');if(fp)fp.value=c.finalPayment||'';
+  const flog=$('f-logistics');if(flog)flog.value=c.logistics||'';
   const el=$('id-preview-code');if(el)el.textContent=c.id+' (수정 중)';
   nav('register',document.querySelector('.nb:nth-child(3)'));
 }

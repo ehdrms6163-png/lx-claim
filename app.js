@@ -359,7 +359,7 @@ function renderDash(){
   if(allRows.length){
     const un=allRows.filter(r=>!matchInsRow(r)).length;
     $('ins-stat-grid').style.display='grid';
-    $('ins-stat-grid').innerHTML=`<div class="sc bordered"><div class="sl">보험사 접수건수</div><div class="sv bl">${allRows.length}건</div></div><div class="sc bordered"><div class="sl">지급보험금</div><div class="sv gr">${fmt만원(totalPaid)}</div></div><div class="sc bordered"><div class="sl">추산(O/S)</div><div class="sv am">${fmt만원(totalOS)}</div></div><div class="sc bordered" style="cursor:pointer;" onclick="nav('insurance',document.querySelector('.nb:nth-child(5)'))"><div class="sl">미매칭</div><div class="sv rd">${un}건</div></div>`;
+    $('ins-stat-grid').innerHTML=`<div class="sc bordered"><div class="sl">보험사 접수건수</div><div class="sv bl">${allRows.length}건</div></div><div class="sc bordered"><div class="sl">지급보험금</div><div class="sv gr">${fmt만원(totalPaid)}</div></div><div class="sc bordered"><div class="sl">추산(O/S)</div><div class="sv am">${fmt만원(totalOS)}</div></div><div class="sc bordered" style="cursor:pointer;" data-fn="navInsurance"><div class="sl">미매칭</div><div class="sv rd">${un}건</div></div>`;
   }else $('ins-stat-grid').style.display='none';
 
   // 상태별 차트
@@ -383,7 +383,7 @@ function renderDash(){
 
   // 기간 내 클레임 목록
   const rec=[...filtered].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,10);
-  $('recent-list').innerHTML=rec.length?rec.map(c=>`<div class="tr" style="grid-template-columns:130px 1fr 70px 80px 70px 88px;" onclick="openDetail('${c.id}')"><span style="font-family:var(--mono);font-size:11px;color:var(--blue);">${c.id}</span><span>${c.name} <span style="color:var(--tx2);font-size:12px;">— ${c.desc.slice(0,22)}...</span></span><span>${c.type}</span><span style="font-size:12px;">${c.client||'-'}</span><span><span class="bdg b-${c.status}">${c.status}</span></span><span>${c.date}</span></div>`).join(''):'<div class="empty">해당 기간 클레임 없음</div>';
+  $('recent-list').innerHTML=rec.length?rec.map(c=>`<div class="tr" style="grid-template-columns:130px 1fr 70px 80px 70px 88px;" data-claim-id="${c.id}"><span style="font-family:var(--mono);font-size:11px;color:var(--blue);">${c.id}</span><span>${c.name} <span style="color:var(--tx2);font-size:12px;">— ${c.desc.slice(0,22)}...</span></span><span>${c.type}</span><span style="font-size:12px;">${c.client||'-'}</span><span><span class="bdg b-${c.status}">${c.status}</span></span><span>${c.date}</span></div>`).join(''):'<div class="empty">해당 기간 클레임 없음</div>';
 }
 
 /* ══════════════════════════════════════════════
@@ -491,7 +491,7 @@ function saveEPMapping(){localStorage.setItem('ep_col_map',JSON.stringify({name:
 function loadSampleEP(){epRecs=defEP;persist();updateEPBar();renderEPTbl();}
 function loadEPFile(input){const f=input.files[0];if(!f)return;const r=new FileReader();r.onload=e=>{try{const lines=e.target.result.split('\n').filter(l=>l.trim());if(lines.length<2)return;const m={name:$('m-name').value||'고객명',addr:$('m-addr').value||'고객주소',prod:$('m-prod').value||'제품모델',idate:$('m-idate').value||'통문일자',tname:$('m-tname').value||'설치기사명',tid:$('m-tid').value||'설치기사ID'};const hdr=lines[0].split(',').map(h=>h.replace(/"/g,'').trim());const idx={name:hdr.indexOf(m.name),addr:hdr.indexOf(m.addr),prod:hdr.indexOf(m.prod),idate:hdr.indexOf(m.idate),tname:hdr.indexOf(m.tname),tid:hdr.indexOf(m.tid)};epRecs=lines.slice(1).map(line=>{const c=line.split(',').map(v=>v.replace(/"/g,'').trim());return{고객명:idx.name>=0?c[idx.name]:'',고객주소:idx.addr>=0?c[idx.addr]:'',제품모델:idx.prod>=0?c[idx.prod]:'',통문일자:idx.idate>=0?c[idx.idate]:'',설치기사명:idx.tname>=0?c[idx.tname]:'',설치기사ID:idx.tid>=0?c[idx.tid]:''};}).filter(r=>r.고객명);persist();updateEPBar();renderEPTbl();}catch(err){console.error('오류:', err.message);}};r.readAsText(f,'utf-8');input.value='';}
 let acT=null;
-function searchEP(v){clearTimeout(acT);const l=$('ac-list');if(!v){l.style.display='none';return;}acT=setTimeout(()=>{const q=v.toLowerCase();const res=epRecs.filter(r=>(r.고객명||'').toLowerCase().includes(q)||(r.고객주소||'').toLowerCase().includes(q)).slice(0,8);if(!res.length){l.style.display='none';return;}window._acR=res;l.innerHTML=res.map((r,i)=>`<div class="aci" onclick="fillEP(${i})"><div class="aci-n">${r.고객명} <span style="font-size:11px;font-weight:400;color:var(--tx2);">${r.통문일자}</span></div><div class="aci-s">${r.제품모델} · ${r.고객주소}</div></div>`).join('');l.style.display='block';},140);}
+function searchEP(v){clearTimeout(acT);const l=$('ac-list');if(!v){l.style.display='none';return;}acT=setTimeout(()=>{const q=v.toLowerCase();const res=epRecs.filter(r=>(r.고객명||'').toLowerCase().includes(q)||(r.고객주소||'').toLowerCase().includes(q)).slice(0,8);if(!res.length){l.style.display='none';return;}window._acR=res;l.innerHTML=res.map((r,i)=>`<div class="aci" data-fill-ep="${i}"><div class="aci-n">${r.고객명} <span style="font-size:11px;font-weight:400;color:var(--tx2);">${r.통문일자}</span></div><div class="aci-s">${r.제품모델} · ${r.고객주소}</div></div>`).join('');l.style.display='block';},140);}
 function fillEP(i){
   const r=window._acR[i];if(!r)return;
   $('f-name').value=r.고객명||'';
@@ -559,24 +559,41 @@ function _initHandlers(){
     updateIdPreview,
     uploadTemplate:(el)=>uploadTemplate(el),
     autoCreateClaims:(el)=>autoCreateClaims(JSON.parse(el.dataset.rows||'[]'),el.dataset.insid||''),
+    addHistBtn:()=>addHist(),
+    chgStatusBtn:()=>chgStatus(),
+    runAIanalyze:()=>runAI('analyze'),
+    runAIresponse:()=>runAI('response'),
+    runAIinternal:()=>runAI('internal'),
+    runAIlegal:()=>runAI('legal'),
   };
   document.addEventListener('click',e=>{
     const l=$('ac-list');
     if(l&&!l.contains(e.target)&&e.target.id!=='ep-s')l.style.display='none';
-    // 부모 순회로 처리
     let el=e.target;
     while(el&&el!==document.body){
       if(el.dataset){
-        // data-fn
-        if(el.dataset.fn){const fn=FM[el.dataset.fn];if(fn){fn(el);return;}}
-        // data-em (수정)
-        if(el.dataset.emType){openEM(el.dataset.emType,el.dataset.emId);return;}
-        // data-del (삭제)
-        if(el.dataset.delType){delItem(el.dataset.delType,el.dataset.delId);return;}
-        // data-claim-id (클레임 행)
-        if('claimId' in el.dataset){
-          const cid=el.dataset.claimId;
-          const insRow=el.dataset.insRow;
+        const d=el.dataset;
+        if(d.fn){const fn=FM[d.fn];if(fn){fn(el);return;}}
+        if(d.emType){openEM(d.emType,d.emId);return;}
+        if(d.delType){delItem(d.delType,d.delId);return;}
+        if(d.selectIns){selectInsCo(d.selectIns);return;}
+        if(d.triggerUpload){triggerInsUpload(d.triggerUpload);return;}
+        if(d.loadSample){loadSampleInsFile(d.loadSample);return;}
+        if(d.removeFile){removeInsFile(d.removeFile,Number(d.fileIdx));return;}
+        if(d.fillEp!==undefined){fillEP(Number(d.fillEp));return;}
+        if(d.removeTpl!==undefined){removeTemplate(Number(d.removeTpl));return;}
+        if(d.openCa){openCADetail(d.openCa);return;}
+        if(d.openSuit){openSuitForm(d.openSuit);return;}
+        if(d.insColor){
+          selInsColor=d.insColor;
+          document.querySelectorAll('#ins-color-picker .color-dot').forEach(x=>x.classList.remove('selected'));
+          el.classList.add('selected');
+          return;
+        }
+        if(d.itemColorIns){item_color(d.itemColorIns,d.itemColor,el);return;}
+        if('claimId' in d){
+          const cid=d.claimId;
+          const insRow=d.insRow;
           if(cid)openDetail(cid);
           else if(insRow){try{prefillFromInsRow(JSON.parse(insRow.replace(/&apos;/g,"'")));}catch(err){console.error(err);}}
           return;
@@ -619,7 +636,7 @@ function renderInsStats2(){
   if(!allRows.length){$('ins-stat-grid2').style.display='none';return;}
   const tp=allRows.reduce((a,r)=>a+(r.지급보험금||0),0),tos=allRows.reduce((a,r)=>a+(r.추산보험금OS||0),0),un=allRows.filter(r=>!matchInsRow(r)).length;
   $('ins-stat-grid2').style.display='grid';
-  $('ins-stat-grid2').innerHTML=`<div class="sc bordered"><div class="sl">전체 건수</div><div class="sv bl">${allRows.length}</div></div><div class="sc bordered"><div class="sl">지급보험금</div><div class="sv gr">${fmt만원(tp)}</div></div><div class="sc bordered"><div class="sl">추산(O/S)</div><div class="sv am">${fmt만원(tos)}</div></div><div class="sc bordered" style="cursor:pointer;" onclick="showInsTab('unmatched',document.querySelectorAll('.stab')[2])"><div class="sl">미매칭</div><div class="sv rd">${un}건</div></div>`;
+  $('ins-stat-grid2').innerHTML=`<div class="sc bordered"><div class="sl">전체 건수</div><div class="sv bl">${allRows.length}</div></div><div class="sc bordered"><div class="sl">지급보험금</div><div class="sv gr">${fmt만원(tp)}</div></div><div class="sc bordered"><div class="sl">추산(O/S)</div><div class="sv am">${fmt만원(tos)}</div></div><div class="sc bordered" style="cursor:pointer;" data-fn="showInsTabUnmatched"><div class="sl">미매칭</div><div class="sv rd">${un}건</div></div>`;
 }
 function renderInsMappingRows(){
   const el=$('ins-mapping-rows');if(!el)return;
@@ -643,7 +660,7 @@ function renderInsSidebar(){
   const sb=$('ins-sidebar');if(!sb)return;
   sb.innerHTML=insCompanies.length?insCompanies.map(ins=>{
     const files=insFiles[ins.id]||[];const totalRows=files.reduce((a,f)=>a+(f.rows||[]).length,0);
-    return `<div class="ins-co-item ${curInsCoId===ins.id?'active':''}" onclick="selectInsCo('${ins.id}')">
+    return `<div class="ins-co-item ${curInsCoId===ins.id?'active':''}" data-select-ins="${ins.id}">
       <div class="ins-co-dot" style="background:${ins.color}22;color:${ins.color};">${ins.name[0]}</div>
       <div style="flex:1;min-width:0;"><div class="ins-co-name">${ins.name}</div><div style="font-size:11px;color:var(--tx2);">${files.length}개 파일 · ${totalRows}건</div></div>
     </div>`;
@@ -662,8 +679,8 @@ function renderInsDetail(id){
       <div style="width:36px;height:36px;border-radius:50%;background:${ins.color}22;color:${ins.color};display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:500;">${ins.name[0]}</div>
       <div><div style="font-size:15px;font-weight:500;">${ins.name}</div><div style="font-size:12px;color:var(--tx2);">${ins.memo||''}</div></div>
       <div style="margin-left:auto;display:flex;gap:6px;">
-        <button class="btn sm suc" onclick="triggerInsUpload('${id}')"><svg class="ico ico-md"><use href="#ico-upload"/></svg> Excel 업로드</button>
-        <button class="btn sm" onclick="loadSampleInsFile('${id}')"><svg class="ico ico-md"><use href="#ico-table"/></svg> 샘플</button>
+        <button class="btn sm suc" data-trigger-upload="${id}"><svg class="ico ico-md"><use href="#ico-upload"/></svg> Excel 업로드</button>
+        <button class="btn sm" data-load-sample="${id}"><svg class="ico ico-md"><use href="#ico-table"/></svg> 샘플</button>
         <input type="file" id="ins-file-${id}" accept=".xlsx,.xls,.csv" style="display:none" onchange="uploadInsFile(this,'${id}')">
       </div>
     </div>
@@ -677,7 +694,7 @@ function renderInsDetail(id){
         <svg class="ico ico-md" style="color:var(--green);font-size:18px;"><use href="#ico-file-spreadsheet"/></svg>
         <div style="flex:1;"><div style="font-size:13px;font-weight:500;">${f.filename}</div><div style="font-size:11px;color:var(--tx2);">${f.uploadDate}</div></div>
         <span style="font-size:12px;color:var(--blue);font-weight:500;">${(f.rows||[]).length}건</span>
-        <button class="btn sm dng" onclick="removeInsFile('${id}',${fi})"><svg class="ico ico-md"><use href="#ico-trash"/></svg></button>
+        <button class="btn sm dng" data-remove-file="${id}" data-file-idx="${fi}"><svg class="ico ico-md"><use href="#ico-trash"/></svg></button>
       </div>
       <div class="tbl" style="margin-bottom:11px;">
         <div class="th ins-preview-row" style="cursor:default;grid-template-columns:120px 1fr 80px 80px 70px 70px;">
@@ -825,7 +842,7 @@ function removeInsFile(insId,fi){if(insFiles[insId])insFiles[insId].splice(fi,1)
 function renderUnmatched(){
   const unmatched=getAllInsRows().filter(r=>!matchInsRow(r));
   $('ins-unmatched-list').innerHTML=unmatched.length?unmatched.map(r=>`
-    <div class="tr" style="grid-template-columns:130px 1fr 90px 90px 80px 80px;" onclick='prefillFromInsRow(${JSON.stringify(r).replace(/'/g,"&#39;")})'>
+    <div class="tr" style="grid-template-columns:130px 1fr 90px 90px 80px 80px;" data-claim-id="" data-ins-row='${JSON.stringify(r).replace(/'/g,"&#39;")}'>
       <span style="font-family:var(--mono);font-size:11px;">${r.접수번호||'-'}</span>
       <span><b style="font-weight:500;">${(r.고객명||'').replace(/\(.*\)/,'')}</b> <span style="font-size:11px;color:var(--tx2);">${(r.주소||'').slice(0,20)}</span></span>
       <span style="font-size:12px;">${fmt만원(r.지급보험금)}</span><span style="font-size:12px;">${fmt만원(r.추산보험금OS)}</span>
@@ -982,14 +999,14 @@ function openDetail(id){
         <div>${(c.history||[]).map(h=>`<div class="tl-i"><div class="tl-d"></div><div class="tl-ln"></div><div><div>${h.text}</div><div class="tl-dt">${h.date}</div></div></div>`).join('')}</div>
         <div style="display:flex;gap:7px;margin-top:9px;">
           <input type="text" id="hist-inp" placeholder="처리 내용..." style="flex:1;padding:5px 8px;font-size:12px;border:0.5px solid var(--bd2);border-radius:var(--r-md);background:var(--bg1);color:var(--tx1);font-family:var(--font);">
-          <button class="btn sm" onclick="addHist()">추가</button>
+          <button class="btn sm" data-fn="addHistBtn">추가</button>
         </div>
         <div style="margin-top:9px;display:flex;gap:5px;align-items:center;">
           <span style="font-size:12px;color:var(--tx2);">상태:</span>
           <select id="st-sel" style="padding:4px 7px;font-size:12px;border:0.5px solid var(--bd2);border-radius:var(--r-md);background:var(--bg1);color:var(--tx1);font-family:var(--font);">
             ${['접수','검토','처리','종결','보류'].map(s=>`<option ${c.status===s?'selected':''}>${s}</option>`).join('')}
           </select>
-          <button class="btn sm pri" onclick="chgStatus()">적용</button>
+          <button class="btn sm pri" data-fn="chgStatusBtn">적용</button>
         </div>
       </div>
     </div>
@@ -999,10 +1016,10 @@ function openDetail(id){
     </div>
     <div class="aib"><h3><svg class="ico ico-md" style="color:var(--blue);"><use href="#ico-robot"/></svg> AI 분석 · 초안 생성</h3>
       <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:9px;">
-        <button class="btn sm" onclick="runAI('analyze')"><svg class="ico ico-md"><use href="#ico-search"/></svg> 클레임 분석</button>
-        <button class="btn sm" onclick="runAI('response')"><svg class="ico ico-md"><use href="#ico-file-text"/></svg> 고객 회신 초안</button>
-        <button class="btn sm" onclick="runAI('internal')"><svg class="ico ico-md"><use href="#ico-building"/></svg> 내부 보고 초안</button>
-        <button class="btn sm" onclick="runAI('legal')"><svg class="ico ico-md"><use href="#ico-scale"/></svg> 법적 리스크</button>
+        <button class="btn sm" data-fn="runAIanalyze"><svg class="ico ico-md"><use href="#ico-search"/></svg> 클레임 분석</button>
+        <button class="btn sm" data-fn="runAIresponse"><svg class="ico ico-md"><use href="#ico-file-text"/></svg> 고객 회신 초안</button>
+        <button class="btn sm" data-fn="runAIinternal"><svg class="ico ico-md"><use href="#ico-building"/></svg> 내부 보고 초안</button>
+        <button class="btn sm" data-fn="runAIlegal"><svg class="ico ico-md"><use href="#ico-scale"/></svg> 법적 리스크</button>
       </div>
       <div id="ai-out"><p style="font-size:13px;color:var(--tx3);">버튼을 클릭하면 AI가 분석합니다. (상단 API Key 필요)</p></div>
     </div>`;
@@ -1078,7 +1095,7 @@ function renderReports(){
   renderTemplates();
 }
 function uploadTemplate(input){const f=input.files[0];if(!f)return;const t={id:Date.now(),name:f.name,size:(f.size/1024).toFixed(0)+'KB',date:new Date().toISOString().slice(0,10)};templates=templates.filter(x=>x.name!==f.name);templates.unshift(t);persist();renderTemplates();input.value='';}
-function renderTemplates(){const l=$('template-list');if(!l)return;l.innerHTML=templates.map(t=>`<div class="pptx-item"><svg class="ico ico-md" style="font-size:20px;color:#C0504D;"><use href="#ico-file-powerpoint"/></svg><div style="flex:1;"><div style="font-size:13px;font-weight:500;">${t.name}</div><div style="font-size:11px;color:var(--tx2);">${t.date} · ${t.size}</div></div><button class="btn sm dng" onclick="removeTemplate(${t.id})"><svg class="ico ico-md"><use href="#ico-trash"/></svg></button></div>`).join('');}
+function renderTemplates(){const l=$('template-list');if(!l)return;l.innerHTML=templates.map(t=>`<div class="pptx-item"><svg class="ico ico-md" style="font-size:20px;color:#C0504D;"><use href="#ico-file-powerpoint"/></svg><div style="flex:1;"><div style="font-size:13px;font-weight:500;">${t.name}</div><div style="font-size:11px;color:var(--tx2);">${t.date} · ${t.size}</div></div><button class="btn sm dng" data-remove-tpl="${t.id}"><svg class="ico ico-md"><use href="#ico-trash"/></svg></button></div>`).join('');}
 function removeTemplate(id){templates=templates.filter(t=>t.id!==id);persist();renderTemplates();}
 function genReport(){
   const c=curDetail;if(!c)return;if(!templates.length){alert('보고서 탭에서 PPTX를 먼저 업로드하세요.');return;}
@@ -1268,7 +1285,7 @@ function openIF(type){
   if(type==='ins'){
     selInsColor=COLORS[0];
     const picker=$('ins-color-picker');
-    if(picker)picker.innerHTML=COLORS.map(c=>`<div class="color-dot ${c===selInsColor?'selected':''}" style="background:${c};" onclick="selInsColor='${c}';document.querySelectorAll('#ins-color-picker .color-dot').forEach(d=>d.classList.remove('selected'));this.classList.add('selected');"></div>`).join('');
+    if(picker)picker.innerHTML=COLORS.map(c=>`<div class="color-dot ${c===selInsColor?'selected':''}" style="background:${c};" data-ins-color="${c}"></div>`).join('');
   }
 }
 function closeIF(type){
@@ -1288,7 +1305,7 @@ function openEM(type,id){
   }else if(type==='ins'){
     const item=insCompanies.find(x=>x.id===id);if(!item)return;
     title.textContent='보험사 수정';
-    body.innerHTML=inp('보험사명',item.name)+inp('연락처/메모',item.memo)+`<div class="fi"><label>색상</label><div class="color-picker">${COLORS.map(c=>`<div class="color-dot ${item.color===c?'selected':''}" style="background:${c};" onclick="item_color('${id}','${c}',this)"></div>`).join('')}</div></div>`;
+    body.innerHTML=inp('보험사명',item.name)+inp('연락처/메모',item.memo)+`<div class="fi"><label>색상</label><div class="color-picker">${COLORS.map(c=>`<div class="color-dot ${item.color===c?'selected':''}" style="background:${c};" data-item-color-ins="${id}" data-item-color="${c}"></div>`).join('')}</div></div>`;
     saveBtn.onclick=()=>{const n=($('em-보험사명')||{}).value||'';if(!n.trim()){alert('필수');return;}item.name=n.trim();item.memo=($('em-연락처/메모')||{}).value||'';persist();closeEM();renderInsList();renderCfgMapping();renderInsSidebar();};
   }else if(type==='asgn'){
     const item=assignees.find(x=>x.id===id);if(!item)return;
@@ -1344,7 +1361,7 @@ function renderCA(){
   });
   const el=$('ca-list');if(!el)return;
   el.innerHTML=filtered.length?filtered.map(c=>`
-    <div class="tr" style="grid-template-columns:110px 70px 1fr 80px 80px 70px 90px 90px;" onclick="openCADetail('${c.id}')">
+    <div class="tr" style="grid-template-columns:110px 70px 1fr 80px 80px 70px 90px 90px;" data-open-ca="${c.id}">
       <span style="font-family:var(--mono);font-size:11px;color:var(--blue);">${c.no||'-'}</span>
       <span><span class="ca-${c.type}">${c.type}</span></span>
       <span><b style="font-weight:500;">${c.claimant}</b> <span style="color:var(--tx2);font-size:12px;">${(c.desc||'').slice(0,20)}</span></span>
@@ -1404,7 +1421,7 @@ function renderSuit(){
   });
   const el=$('suit-list');if(!el)return;
   el.innerHTML=filtered.length?filtered.map(s=>`
-    <div class="tr" style="grid-template-columns:130px 1fr 90px 80px 80px 80px 90px;" onclick="openSuitForm('${s.id}')">
+    <div class="tr" style="grid-template-columns:130px 1fr 90px 80px 80px 80px 90px;" data-open-suit="${s.id}">
       <span style="font-family:var(--mono);font-size:11px;color:var(--blue);">${s.no||'-'}</span>
       <span><b style="font-weight:500;">${s.plaintiff||'-'}</b> <span style="color:var(--tx2);font-size:12px;">${(s.desc||'').slice(0,22)}</span></span>
       <span style="font-size:12px;">${s.court||'-'}</span>

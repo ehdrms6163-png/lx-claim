@@ -413,7 +413,7 @@ function renderDash(){
 
   // 기간 내 클레임 목록
   const rec=[...filtered].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,10);
-  $('recent-list').innerHTML=rec.length?rec.map(c=>`<div class="tr" style="grid-template-columns:130px 1fr 70px 80px 70px 88px;" data-claim-id="${c.id}"><span style="font-family:var(--mono);font-size:11px;color:var(--blue);">${c.id}</span><span>${c.name} <span style="color:var(--tx2);font-size:12px;">— ${c.desc.slice(0,22)}...</span></span><span>${c.type}</span><span style="font-size:12px;">${c.client||'-'}</span><span><span class="bdg b-${c.status}">${c.status}</span></span><span>${c.date}</span></div>`).join(''):'<div class="empty">해당 기간 클레임 없음</div>';
+  $('recent-list').innerHTML=rec.length?rec.map(c=>`<div class="tr" style="grid-template-columns:130px 1fr 70px 80px 70px 88px;" data-claim-id="${c.id}"><span style="font-family:var(--mono);font-size:11px;color:var(--blue);">${c.id}</span><span>${c.name} <span style="color:var(--tx2);font-size:12px;">— ${c.desc.slice(0,22)}...</span></span><span>${c.type}</span><span style="font-size:12px;">${c.client||'-'}</span><span><span class="bdg b-${c.status}">${c.status}</span></span><span>${c.insDate||c.date||'-'}</span></div>`).join(''):'<div class="empty">해당 기간 클레임 없음</div>';
 }
 
 /* ══════════════════════════════════════════════
@@ -425,21 +425,19 @@ function populateListFilters(){
 }
 function renderList(){
   const q=($('s-q')||{}).value||'',st=($('s-st')||{}).value||'',ty=($('s-ty')||{}).value||'',cs=($('s-cs')||{}).value||'';
-  const f=claims.filter(c=>{const m=!q||(c.name+c.id+c.desc+(c.tname||'')+(c.client||'')).toLowerCase().includes(q.toLowerCase());return m&&(!st||c.status===st)&&(!ty||c.type===ty)&&(!cs||c.client===cs);});
+  const f=claims.filter(c=>{const m=!q||(c.name+c.id+c.desc+(c.tname||'')+(c.client||'')+c.id).toLowerCase().includes(q.toLowerCase());return m&&(!st||c.status===st)&&(!ty||c.type===ty)&&(!cs||c.client===cs);});
   $('claim-list').innerHTML=f.length?f.map(c=>{
-    const hasLoss=c.finalPayment&&c.amount;
-    const ratio=hasLoss?((c.finalPayment/c.amount)*100).toFixed(0):null;
-    const ratioBadge=ratio?`<span style="font-size:11px;font-weight:500;color:${ratio<=100?'var(--green)':'var(--red)'};">${ratio<=100?'▼':'▲'}${ratio}%</span>`:'<span style="font-size:11px;color:var(--tx3);">-</span>';
-    return `<div class="tr" style="grid-template-columns:140px 60px 75px 1fr 70px 70px 70px 70px 88px;cursor:pointer;" data-claim-id="${c.id}">
+    const amtStr=c.amount?c.amount.toLocaleString('ko-KR')+'원':'-';
+    return `<div class="tr" style="grid-template-columns:130px 50px 65px 110px 1fr 60px 60px 60px 88px;cursor:pointer;" data-claim-id="${c.id}">
       <span style="font-family:var(--mono);font-size:10px;color:var(--blue);">${c.id}</span>
       <span style="font-size:11px;color:var(--tx2);">${c.groupCode||'-'}</span>
-      <span style="font-size:12px;">${c.client||'-'}</span>
-      <span><b style="font-weight:500;">${c.name}</b> <span style="color:var(--tx2);font-size:12px;">${c.desc.slice(0,20)}...</span></span>
-      <span>${c.type}</span>
+      <span style="font-size:11px;">${c.client||'-'}</span>
+      <span style="font-family:var(--mono);font-size:10px;color:var(--tx2);">${c.insNo||'-'}</span>
+      <span><b style="font-weight:500;">${c.name||'-'}</b> <span style="color:var(--tx2);font-size:12px;">— ${(c.desc||'').slice(0,20)}...</span></span>
+      <span style="font-size:11px;">${c.type}</span>
       <span><span class="bdg b-${c.status}">${c.status}</span></span>
-      <span>${c.assignee}</span>
-      <span>${ratioBadge}</span>
-      <span>${c.date}</span>
+      <span style="font-size:11px;">${amtStr}</span>
+      <span style="font-size:11px;">${c.insDate||c.date||'-'}</span>
     </div>`;
   }).join(''):'<div class="empty">검색 결과 없음</div>';
 }
@@ -650,7 +648,16 @@ function _initHandlers(){
       el=el.parentElement;
     }
   });
-  // 자동생성 모달 버튼 직접 바인딩
+  // 전체 클레임 삭제 버튼
+  const bcc=$('btn-clear-claims');
+  if(bcc)bcc.addEventListener('click',()=>{
+    if(claims.length===0){return;}
+    claims=[];persist();renderDash();renderList();updateInsBadge();
+    const msg=document.createElement('div');
+    msg.style.cssText='position:fixed;bottom:24px;right:24px;padding:12px 18px;background:var(--red);color:#fff;border-radius:10px;font-size:13px;font-weight:500;z-index:400;';
+    msg.textContent='✓ 클레임 전체 삭제 완료';
+    document.body.appendChild(msg);setTimeout(()=>msg.remove(),3000);
+  });
   const amc=$('auto-modal-close');if(amc)amc.addEventListener('click',()=>$('auto-create-modal').classList.remove('open'));
   const amca=$('auto-modal-cancel');if(amca)amca.addEventListener('click',()=>$('auto-create-modal').classList.remove('open'));
   const amco=$('auto-modal-confirm');if(amco)amco.addEventListener('click',()=>{autoCreateClaims(_pendingAutoRows,_pendingAutoInsId);$('auto-create-modal').classList.remove('open');});
@@ -1062,7 +1069,7 @@ function openDetail(id){
         ${c.insDate?`<div class="dr"><span class="dk">보험 접수일</span><span style="color:var(--blue);">${c.insDate}</span></div>`:''}
       </div>
       <div class="card"><h3>EP 설치이력</h3>
-        <div class="dr"><span class="dk">통문일자</span><span>${c.idate||'-'}</span></div>
+        <div class="dr"><span class="dk">설치일자</span><span>${c.idate||'-'}</span></div>
         <div class="dr"><span class="dk">설치기사</span><span>${c.tname||'-'}</span></div>
         <div class="dr"><span class="dk">기사ID</span><span style="font-family:var(--mono);font-size:12px;">${c.tid||'-'}</span></div>
         <div style="border-top:0.5px solid var(--bd3);margin:9px 0;"></div>
@@ -1111,27 +1118,49 @@ function chgStatus(){
   persist();openDetail(curDetail.id);
 }
 function editClaim(){
-  if(!curDetail)return;const c=curDetail;editId=c.id;
-  $('form-title').textContent='클레임 수정';populateRegisterDropdowns();
-  $('f-cs').value=c.clientId||'';onClientChange();
-  const pg=$('f-pgroup');
-  if(pg&&c.groupId){pg.innerHTML='<option value="">선택</option>'+productGroups.map(g=>`<option value="${g.id}">${g.name} (${g.code})</option>`).join('');pg.value=c.groupId;onPgroupChange();}
-  setTimeout(()=>{$('f-pcat').value=c.pcat||'';},30);
-  $('f-name').value=c.name;$('f-phone').value=c.phone||'';
-  $('f-addr').value=c.addr||'';$('f-product').value=c.product||'';
-  $('f-idate').value=c.idate||'';$('f-tname').value=c.tname||'';$('f-tid').value=c.tid||'';
-  $('f-type').value=c.typeCode||'';
-  if($('f-ins-co')&&c.insCoId)$('f-ins-co').value=c.insCoId;
-  $('f-asgn').value=c.assignee||'';$('f-amt').value=c.amount||'';
-  $('f-date').value=c.date;$('f-ins-date').value=c.insDate||'';
-  $('f-desc').value=c.desc;$('f-note').value=c.note||'';
-  const fl=$('f-liability');if(fl)fl.value=c.liability||'';
-  const fe=$('f-eval');if(fe)fe.value=c.evalReflect||'';
-  const fs=$('f-survey');if(fs)fs.value=c.survey||'';
-  const fp=$('f-paid');if(fp)fp.value=c.finalPayment||'';
-  const flog=$('f-logistics');if(flog)flog.value=c.logistics||'';
-  const el=$('id-preview-code');if(el)el.textContent=c.id+' (수정 중)';
-  nav('register',document.querySelector('.nb:nth-child(3)'));
+  if(!curDetail)return;
+  const c=curDetail;editId=c.id;
+  // 탭 전환 (resetForm 없이 직접)
+  document.querySelectorAll('.sec').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.nb').forEach(b=>b.classList.remove('active'));
+  $('s-register').classList.add('active');
+  const regBtn=document.querySelector('.nb:nth-child(3)');if(regBtn)regBtn.classList.add('active');
+  $('form-title').textContent='클레임 수정';
+  populateRegisterDropdowns();
+  // 값 복원
+  setTimeout(()=>{
+    $('f-cs').value=c.clientId||'';onClientChange();
+    const pg=$('f-pgroup');
+    if(pg&&c.groupId){
+      pg.innerHTML='<option value="">선택</option>'+productGroups.map(g=>`<option value="${g.id}">${g.name} (${g.code})</option>`).join('');
+      pg.value=c.groupId;onPgroupChange();
+    }
+    setTimeout(()=>{
+      const pc=$('f-pcat');if(pc)pc.value=c.pcat||'';
+      $('f-name').value=c.name||'';
+      $('f-phone').value=c.phone||'';
+      $('f-addr').value=c.addr||'';
+      $('f-product').value=c.product||'';
+      $('f-idate').value=c.idate||'';
+      $('f-tname').value=c.tname||'';
+      $('f-tid').value=c.tid||'';
+      $('f-type').value=c.typeCode||'';
+      if($('f-ins-co')&&c.insCoId)$('f-ins-co').value=c.insCoId;
+      $('f-asgn').value=c.assignee||'';
+      $('f-amt').value=c.amount||'';
+      $('f-date').value=c.date||'';
+      $('f-ins-date').value=c.insDate||'';
+      $('f-desc').value=c.desc||'';
+      $('f-note').value=c.note||'';
+      const fl=$('f-liability');if(fl)fl.value=c.liability||'';
+      const fe=$('f-eval');if(fe)fe.value=c.evalReflect||'';
+      const fs=$('f-survey');if(fs)fs.value=c.survey||'';
+      const fp=$('f-paid');if(fp)fp.value=c.finalPayment||'';
+      const flog=$('f-logistics');if(flog)flog.value=c.logistics||'';
+      const el=$('id-preview-code');if(el)el.textContent=c.id+' (수정 중)';
+      updateIdPreview();
+    },80);
+  },30);
 }
 
 /* ══════════════════════════════════════════════

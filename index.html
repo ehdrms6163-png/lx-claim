@@ -424,7 +424,7 @@ body{font-family:var(--font);font-size:14px;color:var(--tx1);background:var(--bg
     <select id="s-cs" data-fnc="renderList"><option value="">전체 고객사</option></select>
   </div>
   <div class="tbl">
-    <div class="th" style="grid-template-columns:130px 75px 1fr 70px 70px 75px 80px 80px 88px;"><span>접수번호</span><span>고객사</span><span>고객명/내용</span><span>유형</span><span>상태</span><span>담당자</span><span>예상손해액</span><span>손해율</span><span>접수일</span></div>
+    <div class="th" style="grid-template-columns:130px 50px 65px 110px 1fr 60px 60px 60px 88px;"><span>접수번호</span><span>대구분</span><span>고객사</span><span>보험사접수번호</span><span>고객명/내용</span><span>유형</span><span>상태</span><span>추산O/S</span><span>보험접수일</span></div>
     <div id="claim-list"></div>
   </div>
 </div>
@@ -671,6 +671,14 @@ body{font-family:var(--font);font-size:14px;color:var(--tx1);background:var(--bg
 <!-- ════════════════════ 설정·관리 ════════════════════ -->
 <div class="sec" id="s-settings">
   <div style="font-size:15px;font-weight:500;margin-bottom:14px;">설정 · 관리</div>
+  <!-- 데이터 관리 -->
+  <div style="background:#FCEBEB;border:0.5px solid #F7C1C1;border-radius:var(--r-lg);padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px;">
+    <div style="flex:1;">
+      <div style="font-size:13px;font-weight:500;color:var(--red);">클레임 데이터 초기화</div>
+      <div style="font-size:12px;color:var(--tx2);margin-top:2px;">등록된 클레임 전체를 삭제합니다. 설정(고객사/보험사 등)은 유지됩니다.</div>
+    </div>
+    <button class="btn dng sm" id="btn-clear-claims">전체 삭제</button>
+  </div>
   <div class="settings-layout">
     <div class="settings-nav">
       <button class="snb active" data-fn="showSPclients"><svg class="ico ico-md"><use href="#ico-building"/></svg> 고객사</button>

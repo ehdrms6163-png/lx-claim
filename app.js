@@ -731,6 +731,10 @@ function uploadInsFile(input,insId){
       if(isCSV){const lines=e.target.result.split('\n').filter(l=>l.trim());const hdr=lines[0].split(',').map(h=>h.replace(/"/g,'').trim());rows=lines.slice(1).map(line=>{const cols=line.split(',').map(v=>v.replace(/"/g,'').trim());const obj={};hdr.forEach((h,i)=>obj[h]=cols[i]||'');return obj;});}
       else{const wb=XLSX.read(e.target.result,{type:'array'});const ws=wb.Sheets[wb.SheetNames[0]];rows=XLSX.utils.sheet_to_json(ws,{defval:''});}
       const parsed=rows.map(parseInsRow).filter(r=>r.접수번호||r.고객명);
+      console.log('[디버그] 엑셀 첫행 키:', rows[0]?Object.keys(rows[0]):[]);
+      console.log('[디버그] 엑셀 첫행 원본:', rows[0]);
+      console.log('[디버그] 파싱결과 첫행:', parsed[0]);
+      console.log('[디버그] 전체건수:', rows.length, '→ 파싱:', parsed.length);
       if(!insFiles[insId])insFiles[insId]=[];
       // 기존 파일에서 같은 파일명 있으면 교체, 없으면 추가
       const existIdx=insFiles[insId].findIndex(x=>x.filename===f.name);

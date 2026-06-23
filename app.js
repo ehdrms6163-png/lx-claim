@@ -190,39 +190,53 @@ function mapJeumunGubun(raw){
   return productCats.find(x=>s.includes(x.name)||x.name.includes(s))||null;
 }
 /* 날짜 정규화 YYYYMMDD / YYYY.MM.DD → YYYY-MM-DD */
-function normalizeDate(raw){
-  if(!raw)return '';
-  const s=String(raw).trim();
-  return s.replace(/^(\d{4})(\d{2})(\d{2})$/,'$1-$2-$3')
-          .replace(/^(\d{4})\.(\d{2})\.(\d{2})$/,'$1-$2-$3')
-          .replace(/^(\d{4})\/(\d{2})\/(\d{2})$/,'$1-$2-$3');
+/* 엑셀 시리얼 날짜 → YYYY-MM-DD 변환 */
+function excelDateToStr(v){
+  if(!v&&v!==0)return '';
+  const s=String(v).trim();
+  // 이미 날짜 형식이면 그대로
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s))return s;
+  if(/^\d{4}\.\d{2}\.\d{2}$/.test(s))return s.replace(/\./g,'-');
+  if(/^\d{4}\/\d{2}\/\d{2}$/.test(s))return s.replace(/\//g,'-');
+  if(/^\d{8}$/.test(s))return `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}`;
+  // 엑셀 시리얼 숫자 변환 (1900년 기준)
+  const n=Number(s);
+  if(!isNaN(n)&&n>40000&&n<60000){
+    const d=new Date(Date.UTC(1899,11,30)+n*86400000);
+    return d.toISOString().slice(0,10);
+  }
+  return s;
 }
+function normalizeDate(raw){return excelDateToStr(raw);}
 function normalizeNum(v){if(!v&&v!==0)return 0;if(typeof v==='number')return v;return parseFloat(String(v).replace(/[,\s원]/g,''))||0;}
 function parseInsRow(row){
   const rowKeys=Object.keys(row);
-  // 공백/줄바꿈 무시하고 컬럼명 매칭
   const g=(...candidates)=>{
     for(const c of candidates){
       if(row[c]!==undefined&&row[c]!==null&&row[c]!=='')return String(row[c]).trim();
-      const norm=c.replace(/[\s\n\r]/g,'');
-      const found=rowKeys.find(k=>k.replace(/[\s\n\r]/g,'')===norm);
+      const norm=c.replace(/[\s\n\r()（）]/g,'');
+      const found=rowKeys.find(k=>k.replace(/[\s\n\r()（）]/g,'')===norm);
       if(found&&row[found]!==undefined&&row[found]!==null&&row[found]!=='')return String(row[found]).trim();
     }
     return '';
   };
+  // 고객명 - 키에 "고객명" 포함된 컬럼 찾기
+  const nameKey=rowKeys.find(k=>k.includes('고객명'))||'';
+  const rawName=nameKey?String(row[nameKey]||'').trim():'';
+  const cleanName=rawName.replace(/\(.*?\)/g,'').replace(/\n.*/g,'').trim();
   // 손해사정 담당자 파싱
   const adjRaw=g('손해사정 담당자','담당자');
-  const adjLines=adjRaw.split(/[\n\r\/]/).map(s=>s.trim()).filter(Boolean);
+  const adjLines=adjRaw.split(/[\n\r]/).map(s=>s.trim()).filter(Boolean);
   return {
     접수번호:g('접수번호','PL접수번호'),
-    고객명:g('고객명\n(연락처)','고객명(연락처)','고객명','성명'),
+    고객명:cleanName,
     주소:g('주소','설치주소','고객주소'),
     피해내용:g('피해내용','손해내용'),
     대구분:g('대구분','대분류'),
     제품구분:g('제품구분','제품'),
-    설치일:g('설치일','설치일자','통문일자'),
-    사고일:g('사고일'),
-    접수일:g('접수일','사고접수일'),
+    설치일:excelDateToStr(row['설치일']||row['설치일자']||row['통문일자']||''),
+    사고일:excelDateToStr(row['사고일']||''),
+    접수일:excelDateToStr(row['접수일']||row['사고접수일']||''),
     지급보험금:normalizeNum(row[' 지급보험금 ']||row['지급보험금']||0),
     조사비:normalizeNum(row[' 조사비 ']||row['조사비']||0),
     추산보험금OS:normalizeNum(row[' 추산보험금(O/S) ']||row['추산보험금(O/S)']||0),

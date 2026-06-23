@@ -34,7 +34,7 @@ async function fsSet(docId,value){
 const COLORS=['#185FA5','#3B6D11','#BA7517','#A32D2D','#534AB7','#888780','#0E7C7B','#7D3C98'];
 function $(id){return document.getElementById(id);}
 function uid(p){return (p||'x')+Date.now().toString(36)+Math.random().toString(36).slice(2,5);}
-function fmt만원(v){if(!v)return '-';return v>=10000?(v/10000).toFixed(0)+'만원':v.toLocaleString()+'원';}
+function fmt만원(v){if(!v&&v!==0)return '-';if(!v)return '-';return Number(v).toLocaleString('ko-KR')+'원';}
 
 let apiKey=localStorage.getItem('api_key')||'';
 function saveApiKey(v){apiKey=v;localStorage.setItem('api_key',v);$('api-key-status').textContent=v?'저장됨 ✓':'';}
@@ -969,10 +969,18 @@ function prefillFromInsRow(r){
       }
       updateIdPreview();
 
-      // 통문일자/보험접수일 다시 한번 세팅 (다른 초기화가 덮어쓸 경우 대비)
-      if(r.설치일){const nd=normalizeDate(String(r.설치일));const el=$('f-idate');if(el)el.value=nd||String(r.설치일).trim();}
-      if(r.접수일){const nd=normalizeDate(String(r.접수일));const el=$('f-ins-date');if(el)el.value=nd||String(r.접수일).trim();}
-    },100);
+      // 설치일자/보험접수일 — 맨 마지막에 강제 세팅 (어떤 초기화도 덮어씀)
+      if(r.설치일){
+        const nd=excelDateToStr(String(r.설치일));
+        const el=$('f-idate');
+        if(el){el.value=nd||String(r.설치일).trim();}
+      }
+      if(r.접수일){
+        const nd=excelDateToStr(String(r.접수일));
+        const el=$('f-ins-date');
+        if(el){el.value=nd||String(r.접수일).trim();}
+      }
+    },200);
 
     // 자동입력 배너
     const banner=$('autofill-banner');

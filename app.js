@@ -1781,8 +1781,8 @@ function openMinorDetail(id){
           <button class="btn pri sm" id="btn-minor-link-claim">보험접수 신규 등록 \u2192</button>
         </div>
         <div style="margin-top:8px;padding:11px;background:#E6F1FB;border:0.5px solid #B5D4F4;border-radius:var(--r-md);">
-          <div style="font-size:12px;font-weight:500;color:var(--blue);margin-bottom:6px;">소비자원 접수 연결</div>
-          <div style="font-size:12px;color:var(--tx2);margin-bottom:8px;">소비자원(자율조정/피해구제/분쟁조정)으로 연결합니다.</div>
+          <div style="font-size:12px;font-weight:500;color:var(--blue);margin-bottom:6px;">소비자원 민원 등록</div>
+          <div style="font-size:12px;color:var(--tx2);margin-bottom:8px;">소비자원(자율조정/피해구제/분쟁조정)에 민원을 등록합니다.</div>
           <button class="btn sm" id="btn-minor-link-ca" style="background:var(--blue);color:#fff;border-color:var(--blue);">소비자원 접수 \u2192</button>
         </div>`:''}
       </div>
@@ -1873,12 +1873,12 @@ function linkMinorToCA(minorId){
     claimant:m.name,phone:m.phone,respondent:'LX판토스',
     minorRef:m.id,
     desc:m.desc||'',
-    note:`소액클레임 ${m.id} 연결`,
+    note:`소액클레임 ${m.id} 민원 등록`,
     date:today,
     type:'자율조정',status:'접수',
     history:[
       ...(m.history||[]).filter(h=>!h.stage).map(h=>({...h})),
-      {date:today,text:`소비자원 자율조정 접수 (소액클레임 ${m.id} 이관)`},
+      {date:today,text:`소비자원 민원 등록 (소액클레임 ${m.id} 이관)`},
     ],
   };
   // 소비자원 탭으로 이동 후 모달 열기
@@ -1889,7 +1889,7 @@ function linkMinorToCA(minorId){
   if(caBtn)caBtn.classList.add('active');
   // 소액클레임 상태 업데이트
   if(!m.history)m.history=[];
-  m.history.push({date:new Date().toISOString().slice(0,10),text:'소비자원 접수 연결'});
+  m.history.push({date:new Date().toISOString().slice(0,10),text:'소비자원 민원 등록'});
   persist();
   setTimeout(()=>openCAForm(null,prefill),50);
 }
@@ -2608,14 +2608,10 @@ function saveCA(){
 }
 let curCADetail=null;
 function recalcCAType(c){
-  // 이력에서 가장 마지막 이관 단계 찾기
   if(!c.history||!c.history.length)return;
-  const typeMap={'자율조정 접수':'자율조정','피해구제 접수':'피해구제','분쟁조정 접수':'분쟁조정',
-    '자율조정 단계 시작':'자율조정','피해구제 단계 시작':'피해구제','분쟁조정 단계 시작':'분쟁조정'};
-  // 이관 이력 찾기
+  // 이력 text에서 마지막으로 언급된 유형 찾기
   for(let i=c.history.length-1;i>=0;i--){
-    const h=c.history[i];
-    const txt=h.text||h.stage||'';
+    const txt=(c.history[i].text||c.history[i].stage||'');
     if(txt.includes('분쟁조정')){c.type='분쟁조정';return;}
     if(txt.includes('피해구제')){c.type='피해구제';return;}
     if(txt.includes('자율조정')){c.type='자율조정';return;}
@@ -2628,11 +2624,12 @@ function openCADetail(id){
   // minorRef 자동 복구: note에서 소액클레임 ID 파싱
   if(!c.minorRef&&c.note){
     const m=c.note.match(/소액클레임\s+([\w-]+)\s+연결/);
-    if(m){
-      c.minorRef=m[1];
-      persist();
-    }
+    if(m){c.minorRef=m[1];persist();}
   }
+  // 이력 기반 유형 재계산
+  const prevType=c.type;
+  recalcCAType(c);
+  if(c.type!==prevType)persist();
   document.querySelectorAll('.sec').forEach(s=>s.classList.remove('active'));
   document.querySelectorAll('.nb').forEach(b=>b.classList.remove('active'));
   $('s-consumer-detail').classList.add('active');

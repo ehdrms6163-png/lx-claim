@@ -2037,6 +2037,7 @@ function bindHistoryEditable(history, containerSelector, onUpdate){
       onUpdate();
     });
   });
+  // 수정 저장 후 콜백도 onUpdate 호출됨
 }
 
 function buildLinkedHtml(items){
@@ -2606,6 +2607,20 @@ function saveCA(){
   if(curCADetail&&curCADetail.id===d.id)openCADetail(d.id);
 }
 let curCADetail=null;
+function recalcCAType(c){
+  // 이력에서 가장 마지막 이관 단계 찾기
+  if(!c.history||!c.history.length)return;
+  const typeMap={'자율조정 접수':'자율조정','피해구제 접수':'피해구제','분쟁조정 접수':'분쟁조정',
+    '자율조정 단계 시작':'자율조정','피해구제 단계 시작':'피해구제','분쟁조정 단계 시작':'분쟁조정'};
+  // 이관 이력 찾기
+  for(let i=c.history.length-1;i>=0;i--){
+    const h=c.history[i];
+    const txt=h.text||h.stage||'';
+    if(txt.includes('분쟁조정')){c.type='분쟁조정';return;}
+    if(txt.includes('피해구제')){c.type='피해구제';return;}
+    if(txt.includes('자율조정')){c.type='자율조정';return;}
+  }
+}
 function openCADetail(id){
   curCADetail=consumerCases.find(x=>x.id===id);
   if(!curCADetail)return;
@@ -2688,14 +2703,11 @@ function openCADetail(id){
         <div style="border-top:0.5px solid var(--bd3);margin:9px 0;"></div>
         <h3>금액</h3>
         <div class="dr"><span class="dk">청구금액</span>
-          <span style="display:flex;align-items:center;gap:6px;">
-            <input type="number" id="ca-claim-amt-inp" value="${claimAmt||''}" placeholder="0"
-              style="width:120px;padding:3px 7px;font-size:12px;border:0.5px solid var(--bd2);border-radius:var(--r-md);background:var(--bg1);color:var(--tx1);font-family:var(--font);">
-            <button class="btn sm" id="btn-ca-save-claim-amt">저장</button>
-          </span>
+          <input type="number" id="ca-claim-amt-inp" value="${claimAmt||''}" placeholder="0"
+            style="width:130px;padding:3px 7px;font-size:12px;border:0.5px solid var(--bd2);border-radius:var(--r-md);background:var(--bg1);color:var(--tx1);font-family:var(--font);">
         </div>
         <div class="dr"><span class="dk">결정/합의금액</span><span style="font-weight:500;color:var(--green);">${resultAmt?fmt만원(resultAmt):'-'}</span></div>
-        ${ratio!==null?`<div class="dr"><span class="dk">인용률</span><span style="font-weight:500;color:${ratio>=50?'var(--green)':'var(--red)'};">${ratio}%</span></div>`:''}
+        ${ratio!==null?`<div class="dr"><span class="dk">인용률</span><span id="ca-ratio-display" style="font-weight:500;color:${ratio>=50?'var(--green)':'var(--red)'};">${ratio}%</span></div>`:''}
         ${c.type==='분쟁조정'?`
         <div style="border-top:0.5px solid var(--bd3);margin:9px 0;"></div>
         <h3>분쟁조정위원회</h3>
@@ -2748,6 +2760,13 @@ function openCADetail(id){
           <textarea id="ca-res-note" placeholder="결과 내용..." rows="2" style="width:100%;padding:5px 8px;font-size:12px;border:0.5px solid var(--bd2);border-radius:var(--r-md);background:var(--bg1);color:var(--tx1);font-family:var(--font);margin-top:6px;box-sizing:border-box;resize:vertical;"></textarea>
           <button class="btn sm pri" id="btn-ca-res-save" style="width:100%;margin-top:6px;">결과 저장</button>
         </div>`:''}
+        <!-- 단계별 내용 입력 -->
+        <div style="margin-top:9px;padding:9px;background:var(--bg2);border-radius:var(--r-md);">
+          <div style="font-size:12px;font-weight:500;color:var(--tx2);margin-bottom:6px;">단계 이력 추가</div>
+          <input type="date" id="ca-stage-date" style="width:100%;padding:5px 8px;font-size:12px;border:0.5px solid var(--bd2);border-radius:var(--r-md);background:var(--bg1);color:var(--tx1);font-family:var(--font);margin-bottom:5px;box-sizing:border-box;">
+          <textarea id="ca-stage-content" rows="2" placeholder="단계별 처리 내용 입력..." style="width:100%;padding:5px 8px;font-size:12px;border:0.5px solid var(--bd2);border-radius:var(--r-md);background:var(--bg1);color:var(--tx1);font-family:var(--font);margin-bottom:5px;box-sizing:border-box;resize:vertical;"></textarea>
+          <button class="btn sm pri" id="btn-ca-stage-add" style="width:100%;">단계 내용 추가</button>
+        </div>
         <div style="margin-top:9px;display:flex;gap:5px;align-items:center;flex-wrap:wrap;">
           <span style="font-size:12px;color:var(--tx2);">상태 변경:</span>
           <select id="ca-st-sel" style="padding:4px 7px;font-size:12px;border:0.5px solid var(--bd2);border-radius:var(--r-md);background:var(--bg1);color:var(--tx1);font-family:var(--font);">
@@ -2762,11 +2781,27 @@ function openCADetail(id){
   // 버튼 바인딩
   bindHistoryEditable(c.history||[],'#ca-history-list',()=>{persist();openCADetail(c.id);});
   // 청구금액 저장
-  const bcsa=$('btn-ca-save-claim-amt');
-  if(bcsa)bcsa.addEventListener('click',()=>{
-    const inp=$('ca-claim-amt-inp');if(!inp)return;
-    c.claimAmount=Number(inp.value)||0;
+  // 단계별 내용 추가
+  const bcstage=$('btn-ca-stage-add');
+  if(bcstage)bcstage.addEventListener('click',()=>{
+    const dt=($('ca-stage-date')||{}).value||new Date().toISOString().slice(0,10);
+    const txt=($('ca-stage-content')||{}).value||'';
+    if(!txt.trim())return;
+    if(!c.history)c.history=[];
+    c.history.push({date:dt,text:txt.trim()});
+    const inp=$('ca-stage-content');if(inp)inp.value='';
     persist();openCADetail(c.id);
+  });
+  // 청구금액 실시간 저장 (change 이벤트)
+  const claimAmtInp=$('ca-claim-amt-inp');
+  if(claimAmtInp)claimAmtInp.addEventListener('change',()=>{
+    c.claimAmount=Number(claimAmtInp.value)||0;
+    persist();
+    // 인용률 즉시 업데이트
+    const ratioEl=document.getElementById('ca-ratio-display');
+    if(ratioEl&&c.claimAmount>0&&c.amount>0){
+      ratioEl.textContent=Math.round(c.amount/c.claimAmount*100)+'%';
+    }
   });
   const bah=$('btn-ca-add-hist');
   if(bah)bah.addEventListener('click',()=>{
@@ -2792,7 +2827,7 @@ function openCADetail(id){
     if(note)text+=`\n${note}`;
     c.history.push({date,text,result,amount,ratio});
     if(result)c.result=result;
-    if(amount)c.amount=amount;
+    if(amount){c.amount=amount;const ri=document.getElementById('ca-ratio-display');if(ri&&c.claimAmount>0)ri.textContent=Math.round(amount/c.claimAmount*100)+'%';}
     persist();openCADetail(c.id);
   });
   // 자율조정/피해구제 결과 저장
@@ -2810,7 +2845,7 @@ function openCADetail(id){
     if(note)text+=`\n${note}`;
     c.history.push({date,text,result,amount,ratio});
     if(result)c.result=result;
-    if(amount)c.amount=amount;
+    if(amount){c.amount=amount;const ri=document.getElementById('ca-ratio-display');if(ri&&c.claimAmount>0)ri.textContent=Math.round(amount/c.claimAmount*100)+'%';}
     // 불성립이면 다음 단계로 자동 이관
     const escalateMap={'자율조정':'피해구제','피해구제':'분쟁조정'};
     const nextType=escalateMap[c.type];
@@ -2868,10 +2903,20 @@ function deleteCA(id){consumerCases=consumerCases.filter(x=>x.id!==id);curCADeta
 let curSuitId=null;
 
 let curSuitDetail=null;
+function recalcSuitStatus(s){
+  if(!s.history||!s.history.length)return;
+  const stageStatusMap={'소장접수':'소장접수','변론':'변론','판결':'판결','조정':'조정','항소':'항소','확정':'확정','취하':'취하'};
+  for(let i=s.history.length-1;i>=0;i--){
+    const h=s.history[i];
+    const stage=h.stage||'';
+    if(stageStatusMap[stage]){s.status=stageStatusMap[stage];return;}
+  }
+}
 function openSuitDetail(id){
   curSuitDetail=lawsuits.find(x=>x.id===id);
   if(!curSuitDetail)return;
   const s=curSuitDetail;
+  recalcSuitStatus(s);
   document.querySelectorAll('.sec').forEach(sec=>sec.classList.remove('active'));
   document.querySelectorAll('.nb').forEach(b=>b.classList.remove('active'));
   $('s-suit-detail').classList.add('active');
@@ -2902,6 +2947,7 @@ function openSuitDetail(id){
         <div class="dr"><span class="dk">소가</span><span>${s.amount?fmt만원(s.amount):'-'}</span></div>
         <div class="dr"><span class="dk">결과</span><span style="font-weight:500;">${s.result||'미확정'}</span></div>
         ${s.resultAmount?`<div class="dr"><span class="dk">결과 금액</span><span style="font-weight:500;color:var(--green);">${fmt만원(s.resultAmount)}</span></div>`:''}
+        ${s.amount&&s.resultAmount?`<div class="dr"><span class="dk">소가 대비 비율</span><span style="font-weight:500;color:${Math.round(s.resultAmount/s.amount*100)<=50?'var(--green)':'var(--red)'};">${Math.round(s.resultAmount/s.amount*100)}%</span></div>`:''}
       </div>
       <div class="card">
         <h3>사건 개요</h3>
@@ -3002,6 +3048,12 @@ function openSuitDetail(id){
     const text=lines.join('\n');
     if(!s.history)s.history=[];
     s.history.push({stage,date,text,result,amount:Number(amount)||0,ratio:Number(ratio)||0});
+    // 판결/조정 결과를 suit에 반영
+    if((stage==='판결'||stage==='조정')&&result){s.result=result;}
+    if((stage==='판결'||stage==='조정')&&amount){s.resultAmount=Number(amount);}
+    // 소송 status 연동
+    const stageStatusMap={'소장접수':'소장접수','보험접수':'소장접수','피제소대응품의':'소장접수','인장날인':'소장접수','변론':'변론','판결':'판결','조정':'조정','항소':'항소'};
+    if(stageStatusMap[stage])s.status=stageStatusMap[stage];
     persist();openSuitDetail(s.id);
   });
   const bcs=$('btn-suit-chg-status');

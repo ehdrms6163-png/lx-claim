@@ -2616,6 +2616,8 @@ function renderPhotoUploadUI(claimId){
     {key:'설치사진3',label:'설치사진 #3'},{key:'설치사진4',label:'설치사진 #4'},
     {key:'피해사진1',label:'피해사진 #1'},{key:'피해사진2',label:'피해사진 #2'},
     {key:'피해사진3',label:'피해사진 #3'},{key:'피해사진4',label:'피해사진 #4'},
+    {key:'재방문사진1',label:'재방문사진 #1'},{key:'재방문사진2',label:'재방문사진 #2'},
+    {key:'교육사진1',label:'교육사진 #1'},{key:'교육사진2',label:'교육사진 #2'},
   ];
   return `<div class="card" style="margin-bottom:13px;">
     <h3 style="margin-bottom:10px;">사고 사진</h3>
@@ -2693,7 +2695,7 @@ async function downloadReport(claimId){
     // 클레임 데이터 매핑
     const insName=(insCompanies||[]).find(x=>x.id===c.insCoId)?.name||'-';
     const data={
-      물류협력업체: c.logistics||'-',
+      물류: c.logistics||'-',
       고객명: c.name||'-',
       제품명: c.model||c.product||'-',
       설치구분: c.groupName||'-',
@@ -2712,6 +2714,7 @@ async function downloadReport(claimId){
       제품_모델_수량: c.model||c.product||'-',
       귀책여부: c.liability||'-',
       발생원인: c.type||'-',
+      피해유형: c.type||'-',
       피해현황: c.damage||c.desc||'-',
       사고장소_설치위치: c.accPlace||c.addr||'-',
       발생원인_상세: c.causeDetail||c.desc||'-',
@@ -2722,6 +2725,7 @@ async function downloadReport(claimId){
       조치사항: c.action||(c.history||[]).map(h=>h.text?h.date+': '+h.text:'').filter(Boolean).join('\n')||'-',
       설치기사진술내용: c.techStmt||'-',
       검토요청사항: c.reviewReq||c.note||'-',
+      특이사항: c.note||'-',
       교육일자: c.eduDate||'-',
       교육장소: c.eduPlace||'-',
       교육대상: c.eduTarget||'-',
@@ -2734,11 +2738,50 @@ async function downloadReport(claimId){
     const bytes=new Uint8Array(binary.length);
     for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
 
+    // Firebase Storage에서 사진 로드
+    let photos={};
+    if(storage){
+      try{
+        const listResult=await storage.ref(`claims/${claimId}`).listAll();
+        await Promise.all(listResult.items.map(async item=>{
+          const slot=item.name.replace(/\.[^.]+$/,'');
+          const url=await item.getDownloadURL();
+          // URL → base64
+          const resp=await fetch(url);
+          const blob=await resp.blob();
+          const b64=await new Promise(res=>{
+            const reader=new FileReader();
+            reader.onload=()=>res(reader.result.split(',')[1]);
+            reader.readAsDataURL(blob);
+          });
+          photos[slot]={data:b64,extension:item.name.split('.').pop()};
+        }));
+      }catch(e){console.warn('사진 로드 실패:',e);}
+    }
+
+    // 이미지 플레이스홀더 데이터 추가
+    const slots=['설치사진1','설치사진2','설치사진3','설치사진4','피해사진1','피해사진2','피해사진3','피해사진4','재방문사진1','재방문사진2','교육사진1','교육사진2'];
+    slots.forEach(s=>{
+      if(photos[s])data[s]=photos[s];
+    });
+
     const zip=new PizZip(bytes.buffer);
+
+    // 이미지 모듈 설정
+    const modules=[];
+    if(typeof window.ImageModule!=='undefined'){
+      modules.push(new window.ImageModule({
+        centered:false,
+        getImage:(tag)=>tag&&tag.data?Uint8Array.from(atob(tag.data),c=>c.charCodeAt(0)):null,
+        getSize:()=>[314,234],
+      }));
+    }
+
     const doc=new window.docxtemplater(zip,{
       paragraphLoop:true,
       linebreaks:true,
       delimiters:{start:'{{',end:'}}'},
+      modules:modules,
     });
     doc.render(data);
 

@@ -797,6 +797,9 @@ function _initHandlers(){
     runAIlegal:()=>runAI('legal'),
   };
   document.addEventListener('click',e=>{
+    // 대시보드 탭
+    const dtab=e.target.closest('.dtab');
+    if(dtab&&dtab.dataset.dashTab){switchDashTab(dtab.dataset.dashTab);return;}
     const l=$('ac-list');
     if(l&&!l.contains(e.target)&&e.target.id!=='ep-s')l.style.display='none';
     let el=e.target;
@@ -1587,7 +1590,9 @@ function uploadTemplate(input){const f=input.files[0];if(!f)return;const t={id:D
 function renderTemplates(){const l=$('template-list');if(!l)return;l.innerHTML=templates.map(t=>`<div class="pptx-item"><svg class="ico ico-md" style="font-size:20px;color:#C0504D;"><use href="#ico-file-powerpoint"/></svg><div style="flex:1;"><div style="font-size:13px;font-weight:500;">${t.name}</div><div style="font-size:11px;color:var(--tx2);">${t.date} · ${t.size}</div></div><button class="btn sm dng" data-remove-tpl="${t.id}"><svg class="ico ico-md"><use href="#ico-trash"/></svg></button></div>`).join('');}
 function removeTemplate(id){templates=templates.filter(t=>t.id!==id);persist();renderTemplates();}
 function genReport(){
-  const c=curDetail;if(!c)return;if(!templates.length){alert('보고서 탭에서 PPTX를 먼저 업로드하세요.');return;}
+  const c=curDetail;if(!c)return;
+  downloadReport(c.id);return;
+  if(!templates.length){alert('보고서 탭에서 PPTX를 먼저 업로드하세요.');return;}
   const insName=c.insCoId?getInsName(c.insCoId):getInsForClient(c.clientId)?.name||'-';
   const allRows=getAllInsRows();
   const insRow=allRows.find(r=>{const nm=(r.고객명||'').replace(/\(.*\)/,'').trim();return c.name.includes(nm)&&nm.length>1&&c.idate&&r.설치일&&(c.idate===r.설치일||c.idate.replace(/-/g,'')===r.설치일.replace(/-/g,''));});

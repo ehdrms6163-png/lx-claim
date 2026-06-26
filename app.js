@@ -754,7 +754,6 @@ function populateRegisterDropdowns(){
   const pg=$('f-pgroup');if(pg)pg.innerHTML='<option value="">선택</option>'+productGroups.map(g=>`<option value="${g.id}">${g.name} (${g.code})</option>`).join('');
   const pc=$('f-pcat');if(pc)pc.innerHTML='<option value="">선택</option>';
   const ft=$('f-type');if(ft)ft.innerHTML='<option value="">선택</option>'+accidentTypes.map(t=>`<option value="${t.code}">${t.name} (${t.code})</option>`).join('');
-  const fa=$('f-asgn');if(fa)fa.innerHTML='<option value="">선택</option>'+assignees.map(a=>`<option>${a.name}</option>`).join('');
   onClientChange();updateIdPreview();
 }
 function onPgroupChange(){
@@ -845,7 +844,13 @@ function saveClaim(){
       persist();
     }
   }
-  nav('list',document.querySelector('.nb:nth-child(2)'));
+  // 신규접수 시 상세화면으로 이동, 수정 시 목록으로
+  if(!editId){
+    openDetail(newId);
+    nav('detail', null);
+  } else {
+    nav('list',document.querySelector('.nb:nth-child(2)'));
+  }
 }
 
 /* ══════════════════════════════════════════════
@@ -2627,8 +2632,11 @@ function renderPhotoUploadUI(claimId){
           <div id="photo-${s.key}" style="width:100%;aspect-ratio:4/3;background:var(--bg2);border:0.5px dashed var(--bd2);border-radius:var(--r-md);display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer;position:relative;" onclick="document.getElementById('photo-input-${s.key}').click()">
             <span style="font-size:11px;color:var(--tx3);" id="photo-label-${s.key}">${s.label}</span>
           </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:3px;">
+            <span style="font-size:10px;color:var(--tx3);">${s.label}</span>
+            <button class="btn sm icon dng" id="photo-del-${s.key}" style="display:none;padding:1px 4px;font-size:10px;" data-photo-del="${s.key}" data-claim="${claimId}"><svg class="ico ico-sm"><use href="#ico-trash"/></svg></button>
+          </div>
           <input type="file" id="photo-input-${s.key}" accept="image/*" style="display:none;" data-slot="${s.key}" data-claim="${claimId}">
-          <div style="font-size:10px;color:var(--tx3);margin-top:3px;">${s.label}</div>
         </div>`).join('')}
     </div>
   </div>`;
@@ -2645,10 +2653,34 @@ async function loadClaimPhotos(claimId){
       if(div){
         div.innerHTML=`<img src="${url}" style="width:100%;height:100%;object-fit:cover;">`;
         div.style.border='none';
+        div.onclick=null;
       }
       const lbl=document.getElementById(`photo-label-${slot}`);
       if(lbl)lbl.style.display='none';
+      const delBtn=document.getElementById(`photo-del-${slot}`);
+      if(delBtn)delBtn.style.display='inline-flex';
     }));
+    // 삭제 버튼 이벤트 바인딩
+    document.querySelectorAll(`[data-photo-del]`).forEach(btn=>{
+      if(btn.dataset.claim!==claimId)return;
+      btn.onclick=async(e)=>{
+        e.stopPropagation();
+        const slot=btn.dataset.photoDel;
+        if(!confirm(`${slot} 사진을 삭제할까요?`))return;
+        try{
+          const items=(await storage.ref(`claims/${claimId}`).listAll()).items;
+          const match=items.find(i=>i.name.startsWith(slot));
+          if(match)await match.delete();
+          const div=document.getElementById(`photo-${slot}`);
+          if(div){
+            div.innerHTML=`<span style="font-size:11px;color:var(--tx3);">${slot}</span>`;
+            div.style.border='0.5px dashed var(--bd2)';
+            div.onclick=()=>document.getElementById(`photo-input-${slot}`)?.click();
+          }
+          btn.style.display='none';
+        }catch(err){alert('삭제 실패: '+err.message);}
+      };
+    });
   }catch(e){console.error('사진 로드 오류:',e);}
 }
 
@@ -2747,23 +2779,22 @@ async function downloadReport(claimId){
           const slot=item.name.replace(/\.[^.]+$/,'');
           const url=await item.getDownloadURL();
           // URL → base64
-          // Firebase Storage SDK로 직접 bytes 가져오기 (CORS 우회)
-          const bytes = await item.getBytes ? item.getBytes() : null;
-          let b64;
-          if(bytes){
-            const arr=new Uint8Array(bytes);
-            let str='';
-            arr.forEach(b=>str+=String.fromCharCode(b));
-            b64=btoa(str);
-          } else {
-            const resp=await fetch(url,{cache:'no-store',mode:'cors'});
-            const blob=await resp.blob();
-            b64=await new Promise(res=>{
-              const reader=new FileReader();
-              reader.onload=()=>res(reader.result.split(',')[1]);
-              reader.readAsDataURL(blob);
-            });
-          }
+          // XMLHttpRequest로 시도 (CORS 우회)
+          const b64 = await new Promise((res, rej)=>{
+            const xhr = new XMLHttpRequest();
+            xhr.open('GET', url, true);
+            xhr.responseType = 'arraybuffer';
+            xhr.onload = ()=>{
+              if(xhr.status===200){
+                const arr = new Uint8Array(xhr.response);
+                let str='';
+                arr.forEach(b=>str+=String.fromCharCode(b));
+                res(btoa(str));
+              } else rej(new Error('HTTP '+xhr.status));
+            };
+            xhr.onerror = ()=>rej(new Error('XHR error'));
+            xhr.send();
+          });
           photos[slot]={data:b64,extension:item.name.split('.').pop()};
         }));
       }catch(e){console.warn('사진 로드 실패:',e);}

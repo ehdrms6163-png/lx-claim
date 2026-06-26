@@ -11,11 +11,12 @@ const firebaseConfig = {
   appId: "1:64279299234:web:67237c233f372e99f043fb"
 };
 
-let db;
+let db, storage;
 function initFirebase(){
   try{
     firebase.initializeApp(firebaseConfig);
     db=firebase.firestore();
+    storage=firebase.storage();
   }catch(e){console.error('Firebase 초기화 오류:',e);}
 }
 
@@ -1251,6 +1252,7 @@ function openDetail(id){
       ${c.note?`<div style="margin-top:7px;padding:7px 9px;background:var(--bg2);border-radius:var(--r-md);font-size:12px;color:var(--tx2);"><b style="font-weight:500;">비고:</b> ${c.note}</div>`:''}
     </div>
     ${renderLinkedCard({claimId:null,selfClaimId:c.id})}
+    ${renderPhotoUploadUI(c.id)}
     ${(()=>{
       const linked=lawsuits.filter(s=>s.claimRef===c.id);
       return `<div class="card" style="margin-bottom:13px;">
@@ -1281,6 +1283,8 @@ function openDetail(id){
       </div>
       <div id="ai-out"><p style="font-size:13px;color:var(--tx3);">버튼을 클릭하면 AI가 분석합니다. (상단 API Key 필요)</p></div>
     </div>`;
+  // 사진 + 보고서 버튼 바인딩
+  setTimeout(()=>bindDetailButtons(c),0);
 }
 function addHist(){
   const inp=$('hist-inp');if(!inp||!inp.value.trim())return;
@@ -1296,6 +1300,16 @@ function chgStatus(){
     curDetail.history.push({date:new Date().toISOString().slice(0,10),text:'상태 변경: '+old+' > '+sel.value});
   }
   persist();openDetail(curDetail.id);
+}
+// 사진 로드 + 보고서 버튼 바인딩 (openDetail 호출 후)
+function bindDetailButtons(c){
+  // 보고서 다운로드
+  const rbtn=$('btn-report-download');
+  if(rbtn)rbtn.addEventListener('click',()=>downloadReport(c.id));
+  // 사진 업로드 바인딩
+  bindPhotoUpload(c.id);
+  // 사진 로드
+  loadClaimPhotos(c.id);
 }
 function editClaim(){
   if(!curDetail)return;
@@ -2228,6 +2242,178 @@ function renderPolicyStats(){
     <div class="sc"><div class="sl">건수</div><div class="sv">${filtered.length}건</div></div>`;
   });
   el.innerHTML=html;
+}
+
+/* ══════════════════════════════════════════════
+   사진 업로드 (Firebase Storage)
+══════════════════════════════════════════════ */
+async function uploadPhoto(claimId, slot, file){
+  if(!storage)return null;
+  const ext=file.name.split('.').pop();
+  const ref=storage.ref(`claims/${claimId}/${slot}.${ext}`);
+  await ref.put(file);
+  return await ref.getDownloadURL();
+}
+
+async function getClaimPhotos(claimId){
+  if(!storage)return {};
+  const slots=['설치사진1','설치사진2','설치사진3','설치사진4','피해사진1','피해사진2','피해사진3','피해사진4','재방문사진1','재방문사진2'];
+  const result={};
+  await Promise.all(slots.map(async slot=>{
+    try{
+      const items=(await storage.ref(`claims/${claimId}`).listAll()).items;
+      const match=items.find(i=>i.name.startsWith(slot));
+      if(match)result[slot]=await match.getDownloadURL();
+    }catch(e){}
+  }));
+  return result;
+}
+
+function renderPhotoUploadUI(claimId){
+  const slots=[
+    {key:'설치사진1',label:'설치사진 #1'},{key:'설치사진2',label:'설치사진 #2'},
+    {key:'설치사진3',label:'설치사진 #3'},{key:'설치사진4',label:'설치사진 #4'},
+    {key:'피해사진1',label:'피해사진 #1'},{key:'피해사진2',label:'피해사진 #2'},
+    {key:'피해사진3',label:'피해사진 #3'},{key:'피해사진4',label:'피해사진 #4'},
+  ];
+  return `<div class="card" style="margin-bottom:13px;">
+    <h3 style="margin-bottom:10px;">사고 사진</h3>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;" id="photo-grid-${claimId}">
+      ${slots.map(s=>`
+        <div style="text-align:center;">
+          <div id="photo-${s.key}" style="width:100%;aspect-ratio:4/3;background:var(--bg2);border:0.5px dashed var(--bd2);border-radius:var(--r-md);display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer;position:relative;" onclick="document.getElementById('photo-input-${s.key}').click()">
+            <span style="font-size:11px;color:var(--tx3);" id="photo-label-${s.key}">${s.label}</span>
+          </div>
+          <input type="file" id="photo-input-${s.key}" accept="image/*" style="display:none;" data-slot="${s.key}" data-claim="${claimId}">
+          <div style="font-size:10px;color:var(--tx3);margin-top:3px;">${s.label}</div>
+        </div>`).join('')}
+    </div>
+  </div>`;
+}
+
+async function loadClaimPhotos(claimId){
+  if(!storage)return;
+  try{
+    const listResult=await storage.ref(`claims/${claimId}`).listAll();
+    await Promise.all(listResult.items.map(async item=>{
+      const slot=item.name.replace(/\.[^.]+$/,'');
+      const url=await item.getDownloadURL();
+      const div=document.getElementById(`photo-${slot}`);
+      if(div){
+        div.innerHTML=`<img src="${url}" style="width:100%;height:100%;object-fit:cover;">`;
+        div.style.border='none';
+      }
+      const lbl=document.getElementById(`photo-label-${slot}`);
+      if(lbl)lbl.style.display='none';
+    }));
+  }catch(e){console.error('사진 로드 오류:',e);}
+}
+
+function bindPhotoUpload(claimId){
+  document.querySelectorAll(`[data-claim="${claimId}"]`).forEach(input=>{
+    input.addEventListener('change',async e=>{
+      const file=e.target.files[0];if(!file)return;
+      const slot=input.dataset.slot;
+      const div=document.getElementById(`photo-${slot}`);
+      if(div){
+        div.innerHTML='<span style="font-size:11px;color:var(--tx2);">업로드 중...</span>';
+      }
+      try{
+        const url=await uploadPhoto(claimId,slot,file);
+        if(url&&div){
+          div.innerHTML=`<img src="${url}" style="width:100%;height:100%;object-fit:cover;">`;
+          div.style.border='none';
+        }
+      }catch(err){
+        alert('업로드 실패: '+err.message);
+        if(div)div.innerHTML=`<span style="font-size:11px;color:var(--red);">실패</span>`;
+      }
+    });
+  });
+}
+
+/* ══════════════════════════════════════════════
+   보고서 자동 생성 (docxtemplater)
+══════════════════════════════════════════════ */
+async function downloadReport(claimId){
+  const c=claims.find(x=>x.id===claimId);if(!c){alert('클레임을 찾을 수 없습니다.');return;}
+
+  if(typeof PizZip==='undefined'||typeof Docxtemplater==='undefined'){
+    alert('보고서 라이브러리 로딩 중입니다. 잠시 후 다시 시도해주세요.');return;
+  }
+  if(typeof REPORT_TEMPLATE_B64==='undefined'){
+    alert('보고서 템플릿이 로드되지 않았습니다.');return;
+  }
+
+  const btn=$('btn-report-download');
+  if(btn){btn.textContent='생성 중...';btn.disabled=true;}
+
+  try{
+    // 클레임 데이터 매핑
+    const insName=(insCompanies||[]).find(x=>x.id===c.insCoId)?.name||'-';
+    const data={
+      물류협력업체: c.logistics||'-',
+      고객명: c.name||'-',
+      제품명: c.product||'-',
+      설치구분: c.groupName||'-',
+      사고유형: c.type||'-',
+      소속팀: c.lineteam||'-',
+      보고자: c.assignee||'-',
+      보고일: new Date().toISOString().slice(0,10),
+      사고발생일: c.insDate||c.date||'-',
+      설치기사_차량번호: (c.tname||'-')+(c.tid?' / '+c.tid:''),
+      설치기사ID: c.tid||'-',
+      설치경력_계약일자: '-',
+      설치일: c.idate||'-',
+      연락처: c.phone||'-',
+      주문번호: c.orderNo||'-',
+      제품군: c.pcatName||c.pcat||'-',
+      제품_모델_수량: c.product||'-',
+      귀책여부: c.liability||'-',
+      발생원인: c.type||'-',
+      피해현황: c.desc||'-',
+      사고장소_설치위치: c.addr||'-',
+      발생원인_상세: c.desc||'-',
+      사고경위: c.desc||'-',
+      고객요구사항: '-',
+      고객요구금액: c.amount?c.amount.toLocaleString()+'원':'-',
+      고객진술내용: '-',
+      조치사항: (c.history||[]).map(h=>h.text?`${h.date}: ${h.text}`:'').filter(Boolean).join('\n')||'-',
+      설치기사진술내용: '-',
+      검토요청사항: c.note||'-',
+      교육일자: '-',
+      교육장소: '-',
+      교육대상: '-',
+      교육내용: '-',
+      예방대책: '-',
+    };
+
+    // Base64 → ArrayBuffer
+    const binary=atob(REPORT_TEMPLATE_B64);
+    const bytes=new Uint8Array(binary.length);
+    for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+
+    const zip=new PizZip(bytes.buffer);
+    const doc=new Docxtemplater(zip,{
+      paragraphLoop:true,
+      linebreaks:true,
+      delimiters:{start:'{{',end:'}}'},
+    });
+    doc.render(data);
+
+    const out=doc.getZip().generate({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+    const url=URL.createObjectURL(out);
+    const a=document.createElement('a');
+    a.href=url;
+    a.download=`PL사고보고서_${c.id}_${c.name||''}.docx`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }catch(err){
+    console.error('보고서 생성 오류:',err);
+    alert('보고서 생성 중 오류가 발생했습니다: '+err.message);
+  }finally{
+    if(btn){btn.textContent='보고서';btn.disabled=false;}
+  }
 }
 
 function renderGlobalSearch(){

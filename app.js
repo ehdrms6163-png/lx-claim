@@ -1,4 +1,95 @@
 
+function renderPolicyCards(filteredClaims, from, to){
+  const el=$('loss-grid');if(!el)return;
+  const today=new Date().toISOString().slice(0,10);
+  const activePols=(policySettings||[]).filter(p=>(!p.from||p.from<=today)&&(!p.to||p.to>=today));
+  if(!activePols.length)return;
+
+  let html='<div style="grid-column:span 4;font-size:12px;font-weight:600;color:var(--tx2);padding:10px 0 6px;border-top:0.5px solid var(--bd3);margin-top:4px;">증권별 손해율</div>';
+
+  activePols.forEach(p=>{
+    const ins=(insCompanies||[]).find(x=>x.id===p.insId);
+    const typeLabel=p.type==='HA'?'가정설치 (HA)':'에어컨+정수기/빌트인 (AC)';
+    const groupCodes=p.type==='HA'?['HA']:['ARN','ARR','WB'];
+    // 기간 필터 + 대분류 필터 + 증권 담보기간 교집합
+    const polFrom=p.from||'';
+    const polTo=p.to||'';
+    const effFrom=from&&polFrom?(from>polFrom?from:polFrom):from||polFrom;
+    const effTo=to&&polTo?(to<polTo?to:polTo):to||polTo;
+    const pFiltered=filteredClaims.filter(c=>{
+      const dt=c.insDate||c.date||'';
+      return groupCodes.includes(c.groupCode)&&(!effFrom||dt>=effFrom)&&(!effTo||dt<=effTo);
+    });
+    const paid=pFiltered.reduce((a,c)=>a+(c.finalPayment||0),0);
+    const os=pFiltered.filter(c=>c.status!=='종결').reduce((a,c)=>a+(c.amount||0),0);
+    const limit=p.limit||0;
+    // 손해율 = 지급/한도, 지급율 = 지급/추산
+    const lossR=limit>0?Math.round(paid/limit*100):null;
+    const payR=os>0?Math.round(paid/os*100):null;
+    const remaining=limit>0?limit-paid:null;
+    const barPct=limit>0?Math.min(Math.round(paid/limit*100),100):0;
+    const barColor=lossR===null?'var(--bd2)':lossR>=80?'#E24B4A':lossR>=60?'#EF9F27':'#639922';
+
+    html+=`<div style="grid-column:span 4;background:var(--bg1);border:0.5px solid var(--bd2);border-radius:var(--r-lg);padding:12px 16px;margin-bottom:8px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+        <span style="font-size:13px;font-weight:500;">${ins?ins.name:'-'}</span>
+        <span style="font-size:10px;padding:2px 8px;border-radius:99px;background:${p.type==='HA'?'var(--bg-info, #E6F1FB)':'#EAF3DE'};color:${p.type==='HA'?'var(--blue)':'var(--green)'};">${typeLabel}</span>
+        <span style="font-size:10px;padding:2px 8px;border-radius:99px;background:#EAF3DE;color:var(--green);">유효</span>
+        <span style="font-family:var(--mono);font-size:11px;color:var(--tx2);">증권번호: ${p.no||'-'}</span>
+        <span style="font-size:11px;color:var(--tx3);margin-left:auto;">${p.from||'-'} ~ ${p.to||'-'}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:10px;">
+        <div style="background:var(--bg2);border-radius:var(--r-md);padding:8px 10px;">
+          <div style="font-size:11px;color:var(--tx2);margin-bottom:3px;">지급보험금</div>
+          <div style="font-size:15px;font-weight:500;color:var(--blue);">${fmt만원(paid)}</div>
+        </div>
+        <div style="background:var(--bg2);border-radius:var(--r-md);padding:8px 10px;">
+          <div style="font-size:11px;color:var(--tx2);margin-bottom:3px;">추산 O/S</div>
+          <div style="font-size:15px;font-weight:500;">${fmt만원(os)}</div>
+        </div>
+        <div style="background:var(--bg2);border-radius:var(--r-md);padding:8px 10px;">
+          <div style="font-size:11px;color:var(--tx2);margin-bottom:3px;">보상한도</div>
+          <div style="font-size:15px;font-weight:500;">${fmt만원(limit)}</div>
+        </div>
+        <div style="background:var(--bg2);border-radius:var(--r-md);padding:8px 10px;">
+          <div style="font-size:11px;color:var(--tx2);margin-bottom:3px;">손해율 (지급/한도)</div>
+          <div style="font-size:15px;font-weight:500;color:${lossR===null?'var(--tx3)':lossR>=80?'#E24B4A':lossR>=60?'#EF9F27':'var(--green)'};">${lossR!==null?lossR+'%':'-'}</div>
+        </div>
+        <div style="background:var(--bg2);border-radius:var(--r-md);padding:8px 10px;">
+          <div style="font-size:11px;color:var(--tx2);margin-bottom:3px;">지급율 (지급/추산)</div>
+          <div style="font-size:15px;font-weight:500;color:${payR===null?'var(--tx3)':payR>=80?'#E24B4A':payR>=60?'#EF9F27':'var(--green)'};">${payR!==null?payR+'%':'-'}</div>
+        </div>
+      </div>
+      <div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--tx2);margin-bottom:4px;">
+          <span>잔여한도</span>
+          <span style="color:${remaining!==null&&remaining<0?'#E24B4A':'var(--green)'};">${remaining!==null?fmt만원(remaining)+' 남음':'-'}</span>
+        </div>
+        <div style="height:6px;background:var(--bg2);border-radius:99px;overflow:hidden;">
+          <div style="height:100%;width:${barPct}%;background:${barColor};border-radius:99px;"></div>
+        </div>
+      </div>
+    </div>`;
+  });
+  el.innerHTML+=html;
+}
+function onDashInsChange(){
+  const insId=($('d-ins')||{}).value||'';
+  const clientSel=$('d-client');
+  if(!clientSel)return;
+  clientSel.innerHTML='<option value="">전체</option>';
+  if(insId){
+    // 해당 보험사와 매핑된 고객사만 표시
+    const mapped=clientMapping.filter(m=>m.insId===insId).map(m=>m.clientId);
+    clients.filter(c=>mapped.includes(c.id)).forEach(c=>{
+      clientSel.innerHTML+=`<option value="${c.id}">${c.name}</option>`;
+    });
+  } else {
+    clients.forEach(c=>{clientSel.innerHTML+=`<option value="${c.id}">${c.name}</option>`;});
+  }
+  renderDash();
+}
+
 /* ══════════════════════════════════════════════
    FIREBASE 초기화
 ══════════════════════════════════════════════ */
@@ -442,13 +533,26 @@ function renderSuitDash(){
     '<div class="sc"><div class="sl">패소</div><div class="sv rd">'+losses+'건</div></div>'+
     '<div class="sc"><div class="sl">소가 합계</div><div class="sv">'+fmt만원(totalAmt)+'</div></div>';
   const list=$('suit-dash-list');
-  if(list)list.innerHTML=filtered.slice(0,10).map(s=>'<div class="tr" style="grid-template-columns:130px 1fr 70px 80px 88px;cursor:pointer;" data-goto-suit="'+s.id+'">'+
-    '<span style="font-family:var(--mono);font-size:10px;color:var(--red);">'+(s.no||'-')+'</span>'+
-    '<span>'+s.plaintiff+' vs '+s.defendant+'</span>'+
-    '<span style="font-size:11px;">'+s.status+'</span>'+
-    '<span style="font-size:11px;">'+(s.result||'미확정')+'</span>'+
-    '<span style="font-size:11px;">'+(s.nextDate||'-')+'</span>'+
-  '</div>').join('')||'<div class="empty">해당 기간 소송 없음</div>';
+  if(list)list.innerHTML=filtered.slice(0,20).map(s=>{
+    const ins=(insCompanies||[]).find(x=>x.id===s.insCoId);
+    const p2=s.defendant2?(' / 피고2: '+s.defendant2):'';
+    return '<div style="padding:10px 12px;background:var(--bg1);border:0.5px solid var(--bd2);border-radius:var(--r-md);margin-bottom:7px;cursor:pointer;" data-goto-suit="'+s.id+'">'+
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;flex-wrap:wrap;">'+
+        '<span style="font-family:var(--mono);font-size:11px;color:var(--red);">'+(s.no||'-')+'</span>'+
+        '<span class="bdg b-'+(s.status||'접수')+'">'+s.status+'</span>'+
+        '<span style="font-size:11px;color:var(--tx2);margin-left:auto;">다음기일: '+(s.nextDate||'-')+'</span>'+
+      '</div>'+
+      '<div style="font-size:12px;color:var(--tx2);margin-bottom:4px;">'+
+        '원고: '+(s.plaintiff||'-')+' / 피고1: '+(s.defendant||'-')+p2+
+      '</div>'+
+      '<div style="display:flex;gap:12px;font-size:11px;color:var(--tx3);flex-wrap:wrap;">'+
+        (s.court?'<span>법원: '+s.court+'</span>':'')+
+        (ins?'<span>보험사: '+ins.name+'</span>':'')+
+        (s.lawyer?'<span>법무법인: '+s.lawyer+'</span>':'')+
+        '<span>결과: '+(s.result||'미확정')+'</span>'+
+      '</div>'+
+    '</div>';
+  }).join('')||'<div class="empty">해당 기간 소송 없음</div>';
 }
 function getDashFrom(){
   const from=$('d-from');
@@ -464,6 +568,15 @@ function renderDash(){
   renderPolicyStats();
   // 손해율 토글
   document.querySelectorAll('input[name="loss-mode"]').forEach(r=>r.addEventListener('change',renderDash));
+  // 보험사/고객사 드롭다운 초기화
+  const dIns=$('d-ins');
+  if(dIns&&dIns.options.length<=1){
+    insCompanies.forEach(x=>dIns.innerHTML+=`<option value="${x.id}">${x.name}</option>`);
+  }
+  const dClient=$('d-client');
+  if(dClient&&dClient.options.length<=1){
+    clients.forEach(x=>dClient.innerHTML+=`<option value="${x.id}">${x.name}</option>`);
+  }
   // 물류 드롭다운 (매번 갱신)
   const dlg=$('d-lg');
   if(dlg){const cur=dlg.value;const lgs=[...new Set(claims.map(c=>c.logistics).filter(Boolean))].sort();dlg.innerHTML='<option value="">전체</option>'+lgs.map(l=>`<option value="${l}" ${l===cur?'selected':''}>${l}</option>`).join('');}
@@ -525,13 +638,15 @@ function renderDash(){
   },0);
   const remaining=totalLimit>0?totalLimit-policyPaid:null;
   const limitRatio=totalLimit>0?Math.round(policyPaid/totalLimit*100):null;
+  // 상단 요약 카드
   $('loss-grid').innerHTML=
     '<div class="loss-card os"><div class="loss-label">추산보험금 O/S</div><div class="loss-val">'+fmt만원(claimOS)+'</div><div class="loss-sub">'+tot+'건</div></div>'+
     '<div class="loss-card paid"><div class="loss-label">지급보험금</div><div class="loss-val">'+fmt만원(claimPaid)+'</div><div class="loss-sub">종결 기준</div></div>'+
     '<div class="loss-card inv"><div class="loss-label">조사비 O/S</div><div class="loss-val">'+fmt만원(claimSurvey)+'</div><div class="loss-sub">합계</div></div>'+
-    '<div class="loss-card '+(lossRatio===null?'est':lossRatio<=100?'ratio-good':'ratio-bad')+'"><div class="loss-label">손해율 (지급/추산)</div><div class="loss-val">'+(lossRatio!==null?lossRatio+'%':'-')+'</div><div class="loss-sub">지급÷추산</div></div>'+
-    '<div class="loss-card '+(limitRatio===null?'est':limitRatio<=100?'ratio-good':'ratio-bad')+'"><div class="loss-label">지급율 (지급/보상한도)</div><div class="loss-val">'+(limitRatio!==null?limitRatio+'%':'-')+'</div><div class="loss-sub">지급÷보상한도</div></div>'+
-    '<div class="loss-card '+(remaining===null?'est':remaining>=0?'ratio-good':'ratio-bad')+'"><div class="loss-label">증권 잔여한도</div><div class="loss-val">'+(remaining!==null?fmt만원(remaining):'-')+'</div><div class="loss-sub">'+(totalLimit?fmt만원(totalLimit)+' 중':'-')+'</div></div>';
+    '<div class="loss-card '+(lossRatio===null?'est':lossRatio<=100?'ratio-good':'ratio-bad')+'"><div class="loss-label">지급율 (지급/추산)</div><div class="loss-val">'+(lossRatio!==null?lossRatio+'%':'-')+'</div><div class="loss-sub">지급÷추산</div></div>';
+
+  // 증권별 카드 렌더
+  renderPolicyCards(filtered, from, to);
 
   // 보험사 통계 카드 제거
   const _ins=$('ins-stat-grid');if(_ins)_ins.style.display='none';

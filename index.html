@@ -395,12 +395,19 @@ body{font-family:var(--font);font-size:14px;color:var(--tx1);background:var(--bg
     <button class="quick-btn" data-fn="setQuickYear">올해</button>
     <button class="quick-btn active" data-fn="setQuickAll">전체</button>
     <div class="dash-divider"></div>
-    <label>사고유형</label>
-    <select id="d-type" data-fnc="renderDash" style="min-width:90px;"><option value="">전체</option></select>
-    <label>제품군</label>
-    <select id="d-pcat" data-fnc="renderDash" style="min-width:90px;"><option value="">전체</option></select>
+    <label>대분류</label>
+    <select id="d-group" data-fnc="renderDash" style="min-width:110px;">
+      <option value="">전체</option>
+      <option value="HA">가정설치</option>
+      <option value="ARN">에어컨</option>
+      <option value="WB">정수기/빌트인</option>
+    </select>
     <label>물류</label>
     <select id="d-lg" data-fnc="renderDash" style="min-width:100px;"><option value="">전체</option></select>
+    <label>보험사</label>
+    <select id="d-ins" data-fnc="onDashInsChange" style="min-width:100px;"><option value="">전체</option></select>
+    <label>고객사</label>
+    <select id="d-client" data-fnc="renderDash" style="min-width:90px;"><option value="">전체</option></select>
   </div>
   <!-- 기본 통계 -->
   <div id="dash-claim-content">
@@ -1058,8 +1065,8 @@ body{font-family:var(--font);font-size:14px;color:var(--tx1);background:var(--bg
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pizzip/3.1.4/pizzip.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/docxtemplater/3.49.0/docxtemplater.js"></script>
+<script src="pizzip.min.js"></script>
+<script src="docxtemplater.js"></script>
 <script src="report_template_b64.js"></script>
 <script src="app.js?v=20260627"></script>
 

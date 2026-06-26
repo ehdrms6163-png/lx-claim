@@ -403,12 +403,20 @@ function renderDash(){
   const claimPaid=filtered.reduce((a,c)=>a+(c.finalPayment||0),0);
   const claimSurvey=filtered.reduce((a,c)=>a+(c.survey||0),0);
   const lossRatio=claimOS>0?Math.round(claimPaid/claimOS*100):null;
-  $('loss-grid').innerHTML=`
-    <div class="loss-card os"><div class="loss-label">추산보험금 O/S</div><div class="loss-val">${fmt만원(claimOS)}</div><div class="loss-sub">${tot}건</div></div>
-    <div class="loss-card paid"><div class="loss-label">지급보험금</div><div class="loss-val">${fmt만원(claimPaid)}</div><div class="loss-sub">종결 기준</div></div>
-    <div class="loss-card inv"><div class="loss-label">조사비 O/S</div><div class="loss-val">${fmt만원(claimSurvey)}</div><div class="loss-sub">합계</div></div>
-    <div class="loss-card ${lossRatio===null?'est':lossRatio<=100?'ratio-good':'ratio-bad'}"><div class="loss-label">손해율 (지급/추산)</div><div class="loss-val">${lossRatio!==null?lossRatio+'%':'-'}</div><div class="loss-sub">지급÷추산</div></div>
-`;
+  // 지급율 = 지급/추산 (손해율과 동일 산식이나 별도 표기)
+  const payRatio=lossRatio;
+  // 증권 잔여한도
+  const today2=new Date().toISOString().slice(0,10);
+  const totalLimit=(policySettings||[]).filter(p=>(!p.from||p.from<=today2)&&(!p.to||p.to>=today2)).reduce((a,p)=>a+(p.limit||0),0);
+  const remaining=totalLimit>0?totalLimit-claimPaid:null;
+  const limitRatio=totalLimit>0?Math.round(claimPaid/totalLimit*100):null;
+  $('loss-grid').innerHTML=
+    '<div class="loss-card os"><div class="loss-label">추산보험금 O/S</div><div class="loss-val">'+fmt만원(claimOS)+'</div><div class="loss-sub">'+tot+'건</div></div>'+
+    '<div class="loss-card paid"><div class="loss-label">지급보험금</div><div class="loss-val">'+fmt만원(claimPaid)+'</div><div class="loss-sub">종결 기준</div></div>'+
+    '<div class="loss-card inv"><div class="loss-label">조사비 O/S</div><div class="loss-val">'+fmt만원(claimSurvey)+'</div><div class="loss-sub">합계</div></div>'+
+    '<div class="loss-card '+(lossRatio===null?'est':lossRatio<=100?'ratio-good':'ratio-bad')+'"><div class="loss-label">손해율 (지급/추산)</div><div class="loss-val">'+(lossRatio!==null?lossRatio+'%':'-')+'</div><div class="loss-sub">지급÷추산</div></div>'+
+    '<div class="loss-card '+(limitRatio===null?'est':limitRatio<=100?'ratio-good':'ratio-bad')+'"><div class="loss-label">지급율 (지급/보상한도)</div><div class="loss-val">'+(limitRatio!==null?limitRatio+'%':'-')+'</div><div class="loss-sub">지급÷보상한도</div></div>'+
+    '<div class="loss-card '+(remaining===null?'est':remaining>=0?'ratio-good':'ratio-bad')+'"><div class="loss-label">증권 잔여한도</div><div class="loss-val">'+(remaining!==null?fmt만원(remaining):'-')+'</div><div class="loss-sub">'+(totalLimit?fmt만원(totalLimit)+' 중':'-')+'</div></div>';
 
   // 보험사 통계 카드 제거
   const _ins=$('ins-stat-grid');if(_ins)_ins.style.display='none';
@@ -465,18 +473,23 @@ function renderList(){
   });
   $('claim-list').innerHTML=f.length?f.map(c=>{
     const amtStr=c.amount?c.amount.toLocaleString('ko-KR')+'원':'-';
-    return `<div class="tr" style="grid-template-columns:120px 45px 55px 95px 1fr 70px 55px 55px 80px 82px;cursor:pointer;" data-claim-id="${c.id}">
-      <span style="font-family:var(--mono);font-size:10px;color:var(--blue);">${c.id}</span>
-      <span style="font-size:11px;color:var(--tx2);">${c.groupCode||'-'}</span>
-      <span style="font-size:11px;">${c.client||'-'}</span>
-      <span style="font-family:var(--mono);font-size:10px;color:var(--tx2);">${c.insNo||'-'}</span>
-      <span><b style="font-weight:500;">${c.name||'-'}</b> <span style="color:var(--tx2);font-size:12px;">- ${(c.desc||'').slice(0,20)}...</span></span>
-      <span style="font-size:10px;color:var(--tx2);">${c.logistics||'-'}</span>
-      <span style="font-size:11px;">${c.type}</span>
-      <span><span class="bdg b-${c.status}">${c.status}</span></span>
-      <span style="font-size:11px;">${amtStr}</span>
-      <span style="font-size:11px;">${c.insDate||'-'}</span>
-    </div>`;
+    const payRatio=c.amount>0&&c.finalPayment>0?Math.round(c.finalPayment/c.amount*100):null;
+    const confirmFlag=c.adjConfirm||'';
+    const confirmBdg=confirmFlag==='완료'?'<span style="font-size:10px;padding:1px 5px;background:#EAF3DE;color:var(--green);border-radius:99px;">컨펌완료</span>':
+      confirmFlag==='대기'?'<span style="font-size:10px;padding:1px 5px;background:#FAEEDA;color:#633806;border-radius:99px;">대기중</span>':'';
+    return '<div class="tr" style="grid-template-columns:120px 45px 55px 95px 1fr 70px 55px 55px 70px 70px 82px;cursor:pointer;" data-claim-id="'+c.id+'">'+
+      '<span style="font-family:var(--mono);font-size:10px;color:var(--blue);">'+c.id+'</span>'+
+      '<span style="font-size:11px;color:var(--tx2);">'+(c.groupCode||'-')+'</span>'+
+      '<span style="font-size:11px;">'+(c.client||'-')+'</span>'+
+      '<span style="font-family:var(--mono);font-size:10px;color:var(--tx2);">'+(c.insNo||'-')+'</span>'+
+      '<span><b style="font-weight:500;">'+(c.name||'-')+'</b> <span style="color:var(--tx2);font-size:12px;">- '+(c.desc||'').slice(0,20)+'...</span></span>'+
+      '<span style="font-size:10px;color:var(--tx2);">'+(c.logistics||'-')+'</span>'+
+      '<span style="font-size:11px;">'+c.type+'</span>'+
+      '<span><span class="bdg b-'+c.status+'">'+c.status+'</span></span>'+
+      '<span style="font-size:11px;">'+(payRatio!==null?'<span style="font-weight:500;color:'+(payRatio>=80?'#E24B4A':'var(--green)')+';">'+payRatio+'%</span>':'-')+'</span>'+
+      '<span>'+confirmBdg+'</span>'+
+      '<span style="font-size:11px;">'+(c.insDate||'-')+'</span>'+
+    '</div>';
   }).join(''):'<div class="empty">검색 결과 없음</div>';
 }
 
@@ -1221,6 +1234,17 @@ function openDetail(id){
         <div class="dr"><span class="dk">추산보험금 O/S</span><span>${c.amount?c.amount.toLocaleString()+'원':'-'}</span></div>
         ${c.survey?`<div class="dr"><span class="dk">조사비 O/S</span><span>${c.survey.toLocaleString()}원</span></div>`:''}
         ${c.finalPayment?`<div class="dr"><span class="dk">지급보험금</span><span style="font-weight:500;color:var(--green);">${c.finalPayment.toLocaleString()}원</span></div>`:''}
+        ${c.amount&&c.finalPayment?`<div class="dr"><span class="dk">지급율</span><span style="font-weight:500;color:${Math.round(c.finalPayment/c.amount*100)>=80?'var(--red)':'var(--green)'};">${Math.round(c.finalPayment/c.amount*100)}%</span></div>`:''}
+        <div class="dr"><span class="dk">손사법인 컨펌</span>
+          <span style="display:flex;align-items:center;gap:6px;">
+            <select id="adj-confirm-sel" style="padding:2px 6px;font-size:11px;border:0.5px solid var(--bd2);border-radius:var(--r-md);background:var(--bg1);color:var(--tx1);">
+              <option value="" ${!c.adjConfirm?'selected':''}>-</option>
+              <option value="대기" ${c.adjConfirm==='대기'?'selected':''}>대기중</option>
+              <option value="완료" ${c.adjConfirm==='완료'?'selected':''}>컨펌완료</option>
+            </select>
+            <button class="btn sm" id="btn-adj-confirm-save">적용</button>
+          </span>
+        </div>
         ${c.logistics?`<div class="dr"><span class="dk">물류센터</span><span>${c.logistics}</span></div>`:''}
         ${c.orderNo?`<div class="dr"><span class="dk">설치 주문번호</span><span style="font-family:var(--mono);font-size:12px;">${c.orderNo}</span></div>`:''}
         <div class="dr"><span class="dk">담당자</span><span>${c.assignee||'-'}</span></div>
@@ -1306,6 +1330,13 @@ function bindDetailButtons(c){
   // 보고서 다운로드
   const rbtn=$('btn-report-download');
   if(rbtn)rbtn.addEventListener('click',()=>downloadReport(c.id));
+  // 손사법인 컨펌 저장
+  const acbtn=$('btn-adj-confirm-save');
+  if(acbtn)acbtn.addEventListener('click',()=>{
+    const sel=$('adj-confirm-sel');if(!sel)return;
+    c.adjConfirm=sel.value;
+    persist();openDetail(c.id);
+  });
   // 사진 업로드 바인딩
   bindPhotoUpload(c.id);
   // 사진 로드

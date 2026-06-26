@@ -2747,7 +2747,7 @@ async function downloadReport(claimId){
           const slot=item.name.replace(/\.[^.]+$/,'');
           const url=await item.getDownloadURL();
           // URL → base64
-          const resp=await fetch(url);
+          const resp=await fetch(url, {cache:'no-store', mode:'cors'});
           const blob=await resp.blob();
           const b64=await new Promise(res=>{
             const reader=new FileReader();

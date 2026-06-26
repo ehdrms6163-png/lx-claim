@@ -2747,13 +2747,23 @@ async function downloadReport(claimId){
           const slot=item.name.replace(/\.[^.]+$/,'');
           const url=await item.getDownloadURL();
           // URL → base64
-          const resp=await item.getBlob ? item.getBlob() : fetch(url,{cache:'no-store',mode:'cors'}).then(r=>r.blob());
-          const blob=await resp;
-          const b64=await new Promise(res=>{
-            const reader=new FileReader();
-            reader.onload=()=>res(reader.result.split(',')[1]);
-            reader.readAsDataURL(blob);
-          });
+          // Firebase Storage SDK로 직접 bytes 가져오기 (CORS 우회)
+          const bytes = await item.getBytes ? item.getBytes() : null;
+          let b64;
+          if(bytes){
+            const arr=new Uint8Array(bytes);
+            let str='';
+            arr.forEach(b=>str+=String.fromCharCode(b));
+            b64=btoa(str);
+          } else {
+            const resp=await fetch(url,{cache:'no-store',mode:'cors'});
+            const blob=await resp.blob();
+            b64=await new Promise(res=>{
+              const reader=new FileReader();
+              reader.onload=()=>res(reader.result.split(',')[1]);
+              reader.readAsDataURL(blob);
+            });
+          }
           photos[slot]={data:b64,extension:item.name.split('.').pop()};
         }));
       }catch(e){console.warn('사진 로드 실패:',e);}

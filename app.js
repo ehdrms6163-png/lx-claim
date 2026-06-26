@@ -407,9 +407,16 @@ function renderDash(){
   const payRatio=lossRatio;
   // 증권 잔여한도
   const today2=new Date().toISOString().slice(0,10);
-  const totalLimit=(policySettings||[]).filter(p=>(!p.from||p.from<=today2)&&(!p.to||p.to>=today2)).reduce((a,p)=>a+(p.limit||0),0);
-  const remaining=totalLimit>0?totalLimit-claimPaid:null;
-  const limitRatio=totalLimit>0?Math.round(claimPaid/totalLimit*100):null;
+  const activePols=(policySettings||[]).filter(p=>(!p.from||p.from<=today2)&&(!p.to||p.to>=today2));
+  const totalLimit=activePols.reduce((a,p)=>a+(p.limit||0),0);
+  // 증권별 담보기간 내 해당 대분류 클레임 지급보험금 합산
+  const policyPaid=activePols.reduce((a,p)=>{
+    const groupCodes=p.type==='HA'?['HA']:['ARN','ARR','WB'];
+    const paid=claims.filter(c=>groupCodes.includes(c.groupCode)&&(!p.from||(c.insDate||c.date)>=p.from)&&(!p.to||(c.insDate||c.date)<=p.to)).reduce((s,c)=>s+(c.finalPayment||0),0);
+    return a+paid;
+  },0);
+  const remaining=totalLimit>0?totalLimit-policyPaid:null;
+  const limitRatio=totalLimit>0?Math.round(policyPaid/totalLimit*100):null;
   $('loss-grid').innerHTML=
     '<div class="loss-card os"><div class="loss-label">추산보험금 O/S</div><div class="loss-val">'+fmt만원(claimOS)+'</div><div class="loss-sub">'+tot+'건</div></div>'+
     '<div class="loss-card paid"><div class="loss-label">지급보험금</div><div class="loss-val">'+fmt만원(claimPaid)+'</div><div class="loss-sub">종결 기준</div></div>'+
@@ -689,6 +696,7 @@ function _initHandlers(){
         // 소액클레임 삭제 버튼
         if(el.dataset.deleteMinor){deleteMinor(el.dataset.deleteMinor);return;}
         if(d.delType){delItem(d.delType,d.delId);return;}
+        if(d.emType){openEM(d.emType,d.emId);return;}
         if(d.selectIns){selectInsCo(d.selectIns);return;}
         if(d.triggerUpload){triggerInsUpload(d.triggerUpload);return;}
         if(d.loadSample){loadSampleInsFile(d.loadSample);return;}
@@ -1249,6 +1257,14 @@ function openDetail(id){
         ${c.orderNo?`<div class="dr"><span class="dk">설치 주문번호</span><span style="font-family:var(--mono);font-size:12px;">${c.orderNo}</span></div>`:''}
         <div class="dr"><span class="dk">담당자</span><span>${c.assignee||'-'}</span></div>
         <div class="dr"><span class="dk">클레임 입력일</span><span>${c.date}</span></div>
+        ${(()=>{
+          const dt=c.insDate||c.date||'';
+          const gc=c.groupCode||'';
+          const type=(['HA'].includes(gc))?'HA':(['ARN','ARR','WB'].includes(gc))?'AC':null;
+          if(!type)return '';
+          const pol=(policySettings||[]).find(p=>p.type===type&&(!p.from||dt>=p.from)&&(!p.to||dt<=p.to));
+          return pol?'<div class="dr"><span class="dk">담당 증권번호</span><span style="font-family:var(--mono);font-size:12px;color:var(--blue);">'+(pol.no||'-')+'</span></div>':'';
+        })()}
         ${c.insDate?`<div class="dr"><span class="dk">보험 접수일</span><span style="color:var(--blue);">${c.insDate}</span></div>`:''}
       </div>
       <div class="card"><h3>EP 설치이력</h3>
@@ -2260,13 +2276,15 @@ function renderPolicyStats(){
     const ins=insCompanies.find(x=>x.id===p.insId);
     const typeLabel=p.type==='HA'?'가정설치':'에어컨+정수기/빌트인';
     const groupCodes=p.type==='HA'?['HA']:['ARN','ARR','WB'];
-    // 담보기간 내 클레임
+    // 담보기간 내 + 해당 대분류 클레임만 합산
     const filtered=claims.filter(c=>{
       const dt=c.insDate||c.date||'';
       return groupCodes.includes(c.groupCode)&&(!p.from||dt>=p.from)&&(!p.to||dt<=p.to);
     });
     const paid=filtered.reduce((a,c)=>a+(c.finalPayment||0),0);
+    const os=filtered.filter(c=>c.status!=='종결').reduce((a,c)=>a+(c.amount||0),0);
     const ratio=p.limit>0?Math.round(paid/p.limit*100):null;
+    const lossRatioP=os>0?Math.round(paid/os*100):null;
     html+=`<div class="sc"><div class="sl">${ins?.name||'-'} ${typeLabel}</div><div class="sv bl">${fmt만원(paid)}</div></div>
     <div class="sc"><div class="sl">한도</div><div class="sv">${fmt만원(p.limit)}</div></div>
     <div class="sc"><div class="sl">손해율</div><div class="sv ${ratio!==null?(ratio>=80?'rd':'gr'):''}"><b>${ratio!==null?ratio+'%':'-'}</b></div></div>
@@ -2686,6 +2704,7 @@ function renderCAStats(){
 function openCAEditPage(id){
   const c=id?consumerCases.find(x=>x.id===id):curCADetail;
   if(!c)return;
+  curCADetail=c;
   document.querySelectorAll('.sec').forEach(s=>s.classList.remove('active'));
   $('s-consumer-edit').classList.add('active');
   $('ca-edit-title').textContent='소비자원 수정 - '+(c.no||'');
@@ -2840,7 +2859,7 @@ function openCADetail(id){
   const c=curCADetail;
   // minorRef 자동 복구: note에서 소액클레임 ID 파싱
   if(!c.minorRef&&c.note){
-    const m=c.note.match(/소액클레임\s+([\w-]+)\s+연결/);
+    const m=c.note.match(/소액클레임\s+([\w-]+)/);
     if(m){c.minorRef=m[1];persist();}
   }
   // 이력 기반 유형 재계산
@@ -2974,13 +2993,6 @@ function openCADetail(id){
           <textarea id="ca-res-note" placeholder="결과 내용..." rows="2" style="width:100%;padding:5px 8px;font-size:12px;border:0.5px solid var(--bd2);border-radius:var(--r-md);background:var(--bg1);color:var(--tx1);font-family:var(--font);margin-top:6px;box-sizing:border-box;resize:vertical;"></textarea>
           <button class="btn sm pri" id="btn-ca-res-save" style="width:100%;margin-top:6px;">결과 저장</button>
         </div>`:''}
-        <!-- 단계별 내용 입력 -->
-        <div style="margin-top:9px;padding:9px;background:var(--bg2);border-radius:var(--r-md);">
-          <div style="font-size:12px;font-weight:500;color:var(--tx2);margin-bottom:6px;">단계 이력 추가</div>
-          <input type="date" id="ca-stage-date" style="width:100%;padding:5px 8px;font-size:12px;border:0.5px solid var(--bd2);border-radius:var(--r-md);background:var(--bg1);color:var(--tx1);font-family:var(--font);margin-bottom:5px;box-sizing:border-box;">
-          <textarea id="ca-stage-content" rows="2" placeholder="단계별 처리 내용 입력..." style="width:100%;padding:5px 8px;font-size:12px;border:0.5px solid var(--bd2);border-radius:var(--r-md);background:var(--bg1);color:var(--tx1);font-family:var(--font);margin-bottom:5px;box-sizing:border-box;resize:vertical;"></textarea>
-          <button class="btn sm pri" id="btn-ca-stage-add" style="width:100%;">단계 내용 추가</button>
-        </div>
         <div style="margin-top:9px;display:flex;gap:5px;align-items:center;flex-wrap:wrap;">
           <span style="font-size:12px;color:var(--tx2);">상태 변경:</span>
           <select id="ca-st-sel" style="padding:4px 7px;font-size:12px;border:0.5px solid var(--bd2);border-radius:var(--r-md);background:var(--bg1);color:var(--tx1);font-family:var(--font);">

@@ -384,7 +384,8 @@ body{font-family:var(--font);font-size:14px;color:var(--tx1);background:var(--bg
     <button class="dtab" data-dash-tab="consumer" style="padding:6px 14px;font-size:12px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--tx2);">소비자원</button>
     <button class="dtab" data-dash-tab="lawsuit" style="padding:6px 14px;font-size:12px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--tx2);">소송</button>
   </div>
-  <div class="dash-filter">
+  <!-- 공통 필터 -->
+  <div class="dash-filter" style="flex-wrap:wrap;gap:6px;">
     <label>기간</label>
     <input type="date" id="d-from" data-fnc="renderDash">
     <span style="font-size:12px;color:var(--tx3);">~</span>
@@ -395,6 +396,15 @@ body{font-family:var(--font);font-size:14px;color:var(--tx1);background:var(--bg
     <button class="quick-btn" data-fn="setQuickYear">올해</button>
     <button class="quick-btn active" data-fn="setQuickAll">전체</button>
     <div class="dash-divider"></div>
+    <label>물류</label>
+    <select id="d-lg" data-fnc="renderDash" style="min-width:100px;"><option value="">전체</option></select>
+  </div>
+  <!-- 보험클레임 탭 추가 필터 -->
+  <div class="dash-filter" id="dash-claim-filters" style="flex-wrap:wrap;gap:6px;margin-top:-6px;">
+    <label>고객사</label>
+    <select id="d-client" data-fnc="renderDash" style="min-width:90px;"><option value="">전체</option></select>
+    <label>보험사</label>
+    <select id="d-ins" data-fnc="onDashInsChange" style="min-width:100px;"><option value="">전체</option></select>
     <label>대분류</label>
     <select id="d-group" data-fnc="renderDash" style="min-width:110px;">
       <option value="">전체</option>
@@ -402,12 +412,16 @@ body{font-family:var(--font);font-size:14px;color:var(--tx1);background:var(--bg
       <option value="ARN">에어컨</option>
       <option value="WB">정수기/빌트인</option>
     </select>
-    <label>물류</label>
-    <select id="d-lg" data-fnc="renderDash" style="min-width:100px;"><option value="">전체</option></select>
-    <label>보험사</label>
-    <select id="d-ins" data-fnc="onDashInsChange" style="min-width:100px;"><option value="">전체</option></select>
-    <label>고객사</label>
-    <select id="d-client" data-fnc="renderDash" style="min-width:90px;"><option value="">전체</option></select>
+  </div>
+  <!-- 소비자원 탭 추가 필터 -->
+  <div class="dash-filter" id="dash-consumer-filters" style="flex-wrap:wrap;gap:6px;margin-top:-6px;display:none;">
+    <label>유형</label>
+    <select id="d-ca-type" data-fnc="renderCADash" style="min-width:110px;">
+      <option value="">전체</option>
+      <option value="자율조정">자율조정</option>
+      <option value="피해구제">피해구제</option>
+      <option value="분쟁조정">분쟁조정</option>
+    </select>
   </div>
   <!-- 기본 통계 -->
   <div id="dash-claim-content">

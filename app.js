@@ -425,16 +425,20 @@ function setQuick(q){
 function getFilteredClaims(){
   const from=($('d-from')||{}).value||'';
   const to=($('d-to')||{}).value||'';
-  const fty=($('d-type')||{}).value||'';
-  const fpc=($('d-pcat')||{}).value||'';
+  const fGroup=($('d-group')||{}).value||'';
   const flg=($('d-lg')||{}).value||'';
+  const fIns=($('d-ins')||{}).value||'';
+  const fClient=($('d-client')||{}).value||'';
+  const groupMap={'HA':['HA'],'ARN':['ARN','ARR'],'WB':['WB','ARR']};
+  const groupCodes=fGroup?groupMap[fGroup]||[fGroup]:null;
   return claims.filter(c=>{
     const dt=c.insDate||c.date||'';
     if(from&&dt<from)return false;
     if(to&&dt>to)return false;
-    if(fty&&c.type!==fty)return false;
-    if(fpc&&c.pcat!==fpc)return false;
+    if(groupCodes&&!groupCodes.includes(c.groupCode))return false;
     if(flg&&c.logistics!==flg)return false;
+    if(fIns&&c.insCoId!==fIns)return false;
+    if(fClient&&c.clientId!==fClient)return false;
     return true;
   });
 }
@@ -451,7 +455,11 @@ function switchDashTab(tab){
     b.style.color=active?'var(--blue)':'var(--tx2)';
     b.style.borderBottom=active?'2px solid var(--blue)':'2px solid transparent';
   });
-  // 공통 필터는 항상 표시
+  // 영역별 추가 필터 표시/숨김
+  const claimFilters=$('dash-claim-filters');
+  if(claimFilters)claimFilters.style.display=tab==='claim'?'flex':'none';
+  const caFilters=$('dash-consumer-filters');
+  if(caFilters)caFilters.style.display=tab==='consumer'?'flex':'none';
   // 영역별 컨텐츠 표시/숨김
   const dashClaim=$('dash-claim-content');
   const dashMinor=$('dash-minor');
@@ -462,13 +470,14 @@ function switchDashTab(tab){
   if(dashCA)dashCA.style.display=tab==='consumer'?'':'none';
   if(dashSuit)dashSuit.style.display=tab==='lawsuit'?'':'none';
   // 각 영역 렌더
-  if(tab==='minor')renderMinorDash();
-  if(tab==='consumer')renderCADash();
-  if(tab==='lawsuit')renderSuitDash();
+  if(tab==='claim')renderDash();
+  else if(tab==='minor')renderMinorDash();
+  else if(tab==='consumer')renderCADash();
+  else if(tab==='lawsuit')renderSuitDash();
 }
 function renderMinorDash(){
   const today=new Date().toISOString().slice(0,10);
-  const from=getDashFrom(),to=today;
+  const from=getDashFrom(),to=($('d-to')||{}).value||today;
   const lg=($('d-lg')||{}).value||'';
   const filtered=minorClaims.filter(m=>{
     const dt=m.adate||m.idate||'';
@@ -493,8 +502,13 @@ function renderMinorDash(){
 }
 function renderCADash(){
   const today=new Date().toISOString().slice(0,10);
-  const from=getDashFrom(),to=today;
-  const filtered=consumerCases.filter(c=>{const dt=c.date||'';return(!from||dt>=from)&&(!to||dt<=to);});
+  const from=getDashFrom(),to=($('d-to')||{}).value||today;
+  const fCaType=($('d-ca-type')||{}).value||'';
+  const flg=($('d-lg')||{}).value||'';
+  const filtered=consumerCases.filter(c=>{
+    const dt=c.date||'';
+    return(!from||dt>=from)&&(!to||dt<=to)&&(!fCaType||c.type===fCaType);
+  });
   const tot=filtered.length;
   const byType={자율조정:0,피해구제:0,분쟁조정:0};
   filtered.forEach(c=>{if(byType[c.type]!==undefined)byType[c.type]++;});
@@ -518,7 +532,7 @@ function renderCADash(){
 }
 function renderSuitDash(){
   const today=new Date().toISOString().slice(0,10);
-  const from=getDashFrom(),to=today;
+  const from=getDashFrom(),to=($('d-to')||{}).value||today;
   const filtered=lawsuits.filter(s=>{const dt=s.date||'';return(!from||dt>=from)&&(!to||dt<=to);});
   const tot=filtered.length;
   const wins=filtered.filter(s=>s.result==='승소'||s.result==='일부승소').length;
@@ -565,7 +579,6 @@ function renderDash(){
   if(dty&&dty.children.length<=1)dty.innerHTML='<option value="">전체</option>'+accidentTypes.map(t=>`<option value="${t.name}">${t.name}</option>`).join('');
   const dpc=$('d-pcat');
   if(dpc&&dpc.children.length<=1)dpc.innerHTML='<option value="">전체</option>'+productCats.map(p=>`<option value="${p.code}">${p.name}</option>`).join('');
-  renderPolicyStats();
   // 손해율 토글
   document.querySelectorAll('input[name="loss-mode"]').forEach(r=>r.addEventListener('change',renderDash));
   // 보험사/고객사 드롭다운 초기화
@@ -646,7 +659,7 @@ function renderDash(){
     '<div class="loss-card '+(lossRatio===null?'est':lossRatio<=100?'ratio-good':'ratio-bad')+'"><div class="loss-label">지급율 (지급/추산)</div><div class="loss-val">'+(lossRatio!==null?lossRatio+'%':'-')+'</div><div class="loss-sub">지급÷추산</div></div>';
 
   // 증권별 카드 렌더
-  renderPolicyCards(filtered, from, to);
+  renderPolicyCards(filtered, ($('d-from')||{}).value||'', ($('d-to')||{}).value||'');
 
   // 보험사 통계 카드 제거
   const _ins=$('ins-stat-grid');if(_ins)_ins.style.display='none';

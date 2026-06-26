@@ -370,7 +370,6 @@ body{font-family:var(--font);font-size:14px;color:var(--tx1);background:var(--bg
   <button class="nb" data-fn="navConsumer"><svg class="ico ico-md"><use href="#ico-users"/></svg> 소비자원</button>
   <button class="nb" data-fn="navLawsuit"><svg class="ico ico-md"><use href="#ico-scale"/></svg> 소송</button>
   <button class="nb" data-fn="navSearch"><svg class="ico ico-md"><use href="#ico-search"/></svg> 통합조회</button>
-  <button class="nb" data-fn="navReports"><svg class="ico ico-md"><use href="#ico-file-report"/></svg> 보고서</button>
   <button class="nb" data-fn="navSettings"><svg class="ico ico-md"><use href="#ico-settings"/></svg> 설정·관리</button>
 </div>
 
@@ -379,6 +378,12 @@ body{font-family:var(--font);font-size:14px;color:var(--tx1);background:var(--bg
 <!-- ════════════════════ DASHBOARD ════════════════════ -->
 <div class="sec active" id="s-dashboard">
   <!-- 기간 필터 -->
+  <div style="display:flex;gap:6px;margin-bottom:10px;border-bottom:0.5px solid var(--bd2);padding-bottom:0;">
+    <button class="dtab active" data-dash-tab="claim" style="padding:6px 14px;font-size:12px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--blue);border-bottom:2px solid var(--blue);">보험클레임</button>
+    <button class="dtab" data-dash-tab="minor" style="padding:6px 14px;font-size:12px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--tx2);">소액클레임</button>
+    <button class="dtab" data-dash-tab="consumer" style="padding:6px 14px;font-size:12px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--tx2);">소비자원</button>
+    <button class="dtab" data-dash-tab="lawsuit" style="padding:6px 14px;font-size:12px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--tx2);">소송</button>
+  </div>
   <div class="dash-filter">
     <label>기간</label>
     <input type="date" id="d-from" data-fnc="renderDash">
@@ -398,6 +403,7 @@ body{font-family:var(--font);font-size:14px;color:var(--tx1);background:var(--bg
     <select id="d-lg" data-fnc="renderDash" style="min-width:100px;"><option value="">전체</option></select>
   </div>
   <!-- 기본 통계 -->
+  <div id="dash-claim-content">
   <div class="sg" id="stat-grid"></div>
   <!-- 손해액 통계 -->
   <div class="loss-grid" id="loss-grid"></div>
@@ -419,6 +425,26 @@ body{font-family:var(--font);font-size:14px;color:var(--tx1);background:var(--bg
     <div class="th" style="grid-template-columns:130px 1fr 70px 80px 70px 88px;"><span>접수번호</span><span>고객/내용</span><span>유형</span><span>고객사</span><span>상태</span><span>접수일</span></div>
     <div id="recent-list"></div>
   </div>
+  </div>
+
+  <!-- 소액클레임 대시보드 -->
+  <div id="dash-minor" style="display:none;">
+    <div class="sg" id="minor-dash-grid" style="margin-bottom:14px;"></div>
+    <div style="font-size:13px;font-weight:500;margin-bottom:8px;">기간 내 소액클레임</div>
+    <div id="minor-dash-list"></div>
+  </div>
+  <!-- 소비자원 대시보드 -->
+  <div id="dash-consumer" style="display:none;">
+    <div class="sg" id="ca-dash-grid" style="margin-bottom:14px;"></div>
+    <div style="font-size:13px;font-weight:500;margin-bottom:8px;">기간 내 소비자원</div>
+    <div id="ca-dash-list"></div>
+  </div>
+  <!-- 소송 대시보드 -->
+  <div id="dash-lawsuit" style="display:none;">
+    <div class="sg" id="suit-dash-grid" style="margin-bottom:14px;"></div>
+    <div style="font-size:13px;font-weight:500;margin-bottom:8px;">기간 내 소송</div>
+    <div id="suit-dash-list"></div>
+  </div>
 </div>
 
 <!-- ════════════════════ LIST ════════════════════ -->
@@ -439,77 +465,98 @@ body{font-family:var(--font);font-size:14px;color:var(--tx1);background:var(--bg
 
 <!-- ════════════════════ REGISTER ════════════════════ -->
 <div class="sec" id="s-register">
-  <div class="sh"><h2 id="form-title">신규 클레임 접수</h2></div>
+  <div class="sh"><h2 id="form-title">PL 사고보고 / 신규 클레임 접수</h2></div>
   <div id="autofill-banner" style="display:none;" class="autofill-banner">
     <svg class="ico ico-md" style="font-size:16px;"><use href="#ico-circle-check"/></svg>
     <span id="autofill-msg">보험사 데이터에서 자동 입력됨</span>
     <button class="btn sm dng" style="margin-left:auto;" data-fn="clearAutofill">초기화</button>
   </div>
+  <!-- EP 검색 -->
   <div class="card">
-    <div style="font-size:12px;font-weight:500;color:var(--tx2);margin-bottom:7px;"><svg class="ico ico-md" style="font-size:13px;"><use href="#ico-database-search"/></svg> EP 설치이력 검색</div>
-    <div class="aw">
-      <input type="text" id="ep-s" placeholder="고객명 또는 주소 입력..." data-fni="searchEP" style="width:100%;padding:7px 11px;border:0.5px solid var(--bd2);border-radius:var(--r-md);background:var(--bg1);color:var(--tx1);font-size:13px;font-family:var(--font);">
-      <div class="acl" id="ac-list"></div>
-    </div>
+    <div style="font-size:12px;font-weight:500;color:var(--tx2);margin-bottom:7px;"><svg class="ico ico-md" style="font-size:13px;"><use href="#ico-database-search"/></svg> EP 설치이력 검색 (자동입력)</div>
+    <div class="aw"><input type="text" id="ep-s" placeholder="고객명 또는 주소 입력..." data-fni="searchEP" style="width:100%;padding:7px 11px;border:0.5px solid var(--bd2);border-radius:var(--r-md);background:var(--bg1);color:var(--tx1);font-size:13px;font-family:var(--font);"><div class="acl" id="ac-list"></div></div>
     <div id="ep-preview"></div>
   </div>
+  <!-- 1. 기본사항 -->
   <div class="card">
+    <h3 style="margin-bottom:12px;">1. 기본사항</h3>
     <div class="fg">
+      <div class="fi"><label>소속(팀)</label><select id="f-lineteam"><option value="">선택</option><option>수도권서부팀</option><option>수도권동부팀</option><option>지방권서부팀</option><option>지방권중부팀</option><option>지방권동부팀</option></select></div>
+      <div class="fi"><label>물류(협력업체)</label><input type="text" id="f-logistics" placeholder="물류센터명"></div>
+      <div class="fi"><label>설치기사 / 차량번호</label><input type="text" id="f-tname" placeholder="기사명 / 차량번호"></div>
+      <div class="fi"><label>설치기사 ID</label><input type="text" id="f-tid" placeholder="기사ID"></div>
+      <div class="fi"><label>설치경력 / 계약일자</label><input type="text" id="f-career" placeholder="예: 3년 / 2023-01-01"></div>
+      <div class="fi"><label>설치일자</label><input type="date" id="f-idate"></div>
+      <div class="fi"><label>보고자</label><select id="f-asgn"><option value="">선택</option></select></div>
+      <div class="fi"><label>보고일</label><input type="date" id="f-date"></div>
+      <div class="fi"><label>사고발생일</label><input type="date" id="f-acc-date"></div>
       <div class="fi"><label>고객사</label><select id="f-cs" data-fnc="onClientChange"><option value="">선택</option></select></div>
       <div class="fi"><label>담당 보험사 <span id="f-ins-auto" style="font-size:11px;color:var(--blue);"></span></label><select id="f-ins-co"><option value="">-</option></select></div>
       <div class="fi"><label>고객명 *</label><input type="text" id="f-name" placeholder="홍길동"></div>
       <div class="fi"><label>연락처</label><input type="text" id="f-phone" placeholder="010-0000-0000"></div>
       <div class="fi"><label>주소</label><input type="text" id="f-addr" placeholder="설치 주소"></div>
+      <div class="fi"><label>설치 주문번호</label><input type="text" id="f-product" placeholder="주문번호 (엑셀 매칭 기준)"></div>
       <div class="fi"><label>대구분</label><select id="f-pgroup" data-fnc="onPgroupChange"><option value="">선택</option></select></div>
       <div class="fi"><label>제품구분</label><select id="f-pcat" data-fnc="updateIdPreview"><option value="">선택</option></select></div>
-      <div class="fi"><label>설치 주문번호</label><input type="text" id="f-product" placeholder="설치 주문번호"></div>
+      <div class="fi"><label>제품/모델/수량</label><input type="text" id="f-model" placeholder="예: 냉장고 GR-M61HSBK 1대"></div>
       <div class="fi"><label>사고 유형</label><select id="f-type" data-fnc="updateIdPreview"><option value="">선택</option></select></div>
-      <div class="fi"><label>설치일자</label><input type="date" id="f-idate"></div>
-      <div class="fi"><label>설치기사 / 기사ID</label>
-        <div style="display:flex;gap:6px;"><input type="text" id="f-tname" placeholder="기사 이름" style="flex:1;"><input type="text" id="f-tid" placeholder="기사ID" style="width:90px;"></div>
-      </div>
-      <div class="fi"><label>담당자</label><select id="f-asgn"><option value="">선택</option></select></div>
-      <div class="fi"><label>추산보험금 O/S (원)</label><input type="number" id="f-amt" placeholder="0"></div>
-      <div class="fi"><label>조사비 O/S (원)</label><input type="number" id="f-survey" placeholder="0"></div>
-      <div class="fi"><label>지급보험금 (원)</label><input type="number" id="f-paid" placeholder="0"></div>
-      <div class="fi"><label>물류센터</label><input type="text" id="f-logistics" placeholder="물류센터명"></div>
-      <div class="fi"><label>담당 Line팀</label><select id="f-lineteam">
-        <option value="">선택</option>
-        <option>수도권서부팀</option><option>수도권동부팀</option>
-        <option>지방권서부팀</option><option>지방권중부팀</option><option>지방권동부팀</option>
-      </select></div>
-      <div class="fi"><label>보험 접수일 <span style="font-size:11px;color:var(--blue);">(엑셀 자동)</span></label><input type="date" id="f-ins-date" placeholder="보험사 접수일"></div>
-      <div class="fi"><label>클레임 입력일 <span style="font-size:11px;color:var(--green);">(오늘 자동)</span></label><input type="date" id="f-date"></div>
+      <div class="fi"><label>귀책여부</label><select id="f-liability"><option value="">미확인</option><option value="귀책">귀책</option><option value="비귀책">비귀책</option><option value="확인중">확인중</option><option value="분쟁중">분쟁중</option></select></div>
+      <div class="fi"><label>협력업체 평가 반영</label><select id="f-eval"><option value="">미정</option><option value="반영">반영</option><option value="미반영">미반영</option><option value="검토중">검토중</option></select></div>
+      <div class="fi"><label>보험 접수일</label><input type="date" id="f-ins-date"></div>
+      <div class="fi"><label>담당자</label><select id="f-asgn2"><option value="">선택</option></select></div>
       <div class="fi full"><label>접수번호 (자동생성)</label>
         <div class="id-preview"><svg class="ico ico-md" style="color:var(--tx3);"><use href="#ico-hash"/></svg><span class="id-code" id="id-preview-code">제품군·유형 선택 후 자동 생성</span></div>
       </div>
-      <div class="fi"><label>귀책여부</label>
-        <select id="f-liability">
-          <option value="">미확인</option>
-          <option value="귀책">귀책</option>
-          <option value="비귀책">비귀책</option>
-          <option value="확인중">확인중</option>
-          <option value="분쟁중">분쟁중</option>
-        </select>
-      </div>
-      <div class="fi"><label>협력업체 평가 반영 여부</label>
-        <select id="f-eval">
-          <option value="">미정</option>
-          <option value="반영">반영</option>
-          <option value="미반영">미반영</option>
-          <option value="검토중">검토중</option>
-        </select>
-      </div>
-      <div class="fi full"><label>클레임 내용 *</label><textarea id="f-desc" rows="4" placeholder="고객 불만 및 발생 경위를 상세히 입력하세요..."></textarea></div>
-      <div class="fi full"><label>특이사항/비고</label><textarea id="f-note" rows="2" placeholder="PL 이슈, 시공사 관련, 분쟁 이력 등..."></textarea></div>
-    </div>
-    <div style="display:flex;justify-content:flex-end;gap:7px;margin-top:13px;">
-      <button class="btn" data-fn="resetForm">초기화</button>
-      <button class="btn pri" data-fn="saveClaim"><svg class="ico ico-md"><use href="#ico-check"/></svg> 저장</button>
+      <div class="fi full"><label>피해현황</label><textarea id="f-damage" rows="3" placeholder="피해 현황..."></textarea></div>
+      <div class="fi"><label>추산보험금 O/S (원)</label><input type="number" id="f-amt" placeholder="0"></div>
+      <div class="fi"><label>조사비 O/S (원)</label><input type="number" id="f-survey" placeholder="0"></div>
+      <div class="fi"><label>지급보험금 (원)</label><input type="number" id="f-paid" placeholder="0"></div>
     </div>
   </div>
+  <!-- 2. 사고내용 -->
+  <div class="card">
+    <h3 style="margin-bottom:12px;">2. 사고내용</h3>
+    <div class="fg">
+      <div class="fi full"><label>사고장소 / 설치위치</label><input type="text" id="f-acc-place" placeholder="예: 주방 / 싱크대 하단"></div>
+      <div class="fi full"><label>발생원인(상세)</label><textarea id="f-cause-detail" rows="3" placeholder="발생원인 상세..."></textarea></div>
+      <div class="fi full"><label>사고경위 (클레임 내용) *</label><textarea id="f-desc" rows="4" placeholder="사고 경위를 상세히 입력하세요..."></textarea></div>
+    </div>
+  </div>
+  <!-- 3. 고객 확인내용 -->
+  <div class="card">
+    <h3 style="margin-bottom:12px;">3. 고객 확인내용</h3>
+    <div class="fg">
+      <div class="fi full"><label>고객 요구사항</label><textarea id="f-customer-req" rows="2" placeholder="고객 요구사항..."></textarea></div>
+      <div class="fi"><label>고객 요구금액 (원)</label><input type="number" id="f-customer-amt" placeholder="0"></div>
+      <div class="fi full"><label>고객 진술내용</label><textarea id="f-customer-stmt" rows="3" placeholder="고객 진술내용..."></textarea></div>
+    </div>
+  </div>
+  <!-- 4. 확인·조치사항 -->
+  <div class="card">
+    <h3 style="margin-bottom:12px;">4. 확인·조치사항 및 검토요청사항</h3>
+    <div class="fg">
+      <div class="fi full"><label>조치사항</label><textarea id="f-action" rows="3" placeholder="조치사항..."></textarea></div>
+      <div class="fi full"><label>설치기사 진술내용</label><textarea id="f-tech-stmt" rows="3" placeholder="설치기사 진술내용..."></textarea></div>
+      <div class="fi full"><label>검토요청사항</label><textarea id="f-review-req" rows="2" placeholder="검토요청사항..."></textarea></div>
+      <div class="fi full"><label>특이사항/비고</label><textarea id="f-note" rows="2" placeholder="PL 이슈, 시공사 관련, 분쟁 이력 등..."></textarea></div>
+    </div>
+  </div>
+  <!-- 5. 교육결과 -->
+  <div class="card">
+    <h3 style="margin-bottom:12px;">5. 교육결과</h3>
+    <div class="fg">
+      <div class="fi"><label>교육일자</label><input type="date" id="f-edu-date"></div>
+      <div class="fi"><label>교육장소</label><input type="text" id="f-edu-place" placeholder="교육 장소"></div>
+      <div class="fi full"><label>교육대상</label><input type="text" id="f-edu-target" placeholder="교육 대상"></div>
+      <div class="fi full"><label>교육내용</label><textarea id="f-edu-content" rows="2" placeholder="교육 내용..."></textarea></div>
+      <div class="fi full"><label>예방대책</label><textarea id="f-prevention" rows="2" placeholder="예방대책..."></textarea></div>
+    </div>
+  </div>
+  <div style="display:flex;justify-content:flex-end;gap:7px;margin-top:13px;padding-bottom:20px;">
+    <button class="btn" data-fn="resetForm">초기화</button>
+    <button class="btn pri" data-fn="saveClaim"><svg class="ico ico-md"><use href="#ico-check"/></svg> 저장 및 클레임 생성</button>
+  </div>
 </div>
-
 <!-- ════════════════════ EP 연동 ════════════════════ -->
 <div class="sec" id="s-eplink">
   <div class="sh"><h2>EP 설치이력 연동</h2><button class="btn suc" data-fn="epFileClick"><svg class="ico ico-md"><use href="#ico-file-spreadsheet"/></svg> CSV 불러오기</button><input type="file" id="ep-file" accept=".csv" style="display:none" data-fnc="loadEPFile"></div>
@@ -723,29 +770,6 @@ body{font-family:var(--font);font-size:14px;color:var(--tx1);background:var(--bg
     <button class="btn pri" id="btn-gs-search">검색</button>
   </div>
   <div id="gs-result"></div>
-</div>
-
-<!-- ════════════════════ 보고서 ════════════════════ -->
-<div class="sec" id="s-reports">
-  <div class="sh"><h2>보고서 양식 관리</h2><button class="btn suc" data-fn="rptFileClick"><svg class="ico ico-md"><use href="#ico-upload"/></svg> PPTX 업로드</button><input type="file" id="rpt-file" accept=".pptx,.ppt" style="display:none" data-fnc="uploadTemplate"></div>
-  <div class="card">
-    <div style="font-size:13px;font-weight:500;margin-bottom:4px;">사고 조사서 양식</div>
-    <div style="font-size:12px;color:var(--tx2);margin-bottom:13px;">업로드한 PPTX가 클레임 상세의 보고서 생성 버튼에 연결됩니다.</div>
-    <div class="pptx-box" data-fn="rptFileClick">
-      <svg class="ico ico-md" style="font-size:32px;color:var(--tx3);margin-bottom:8px;display:block;"><use href="#ico-file-powerpoint"/></svg>
-      <div style="font-size:13px;color:var(--tx2);">클릭하여 PPTX 업로드</div>
-    </div>
-    <div id="template-list"></div>
-  </div>
-  <div class="card">
-    <div style="font-size:13px;font-weight:500;margin-bottom:9px;">접수번호 코드 현황</div>
-    <div class="code-grid">
-      <div><div style="font-size:12px;font-weight:500;color:var(--tx2);margin-bottom:6px;">제품군 코드</div><div id="pcat-code-tbl"></div></div>
-      <div><div style="font-size:12px;font-weight:500;color:var(--tx2);margin-bottom:6px;">사고유형 코드</div><div id="atype-code-tbl"></div></div>
-    </div>
-    <div style="font-size:12px;font-weight:500;color:var(--tx2);margin-bottom:7px;margin-top:11px;">올해 조합별 현황</div>
-    <div id="counter-stats"></div>
-  </div>
 </div>
 
 <!-- ════════════════════ 설정·관리 ════════════════════ -->

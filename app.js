@@ -347,6 +347,114 @@ function getFilteredClaims(){
     return true;
   });
 }
+
+/* ══════════════════════════════════════════════
+   대시보드 영역별 탭
+══════════════════════════════════════════════ */
+let curDashTab='claim';
+function switchDashTab(tab){
+  curDashTab=tab;
+  // 탭 버튼 스타일
+  document.querySelectorAll('.dtab').forEach(b=>{
+    const active=b.dataset.dashTab===tab;
+    b.style.color=active?'var(--blue)':'var(--tx2)';
+    b.style.borderBottom=active?'2px solid var(--blue)':'2px solid transparent';
+  });
+  // 공통 필터는 항상 표시
+  // 영역별 컨텐츠 표시/숨김
+  const dashClaim=$('dash-claim-content');
+  const dashMinor=$('dash-minor');
+  const dashCA=$('dash-consumer');
+  const dashSuit=$('dash-lawsuit');
+  if(dashClaim)dashClaim.style.display=tab==='claim'?'':'none';
+  if(dashMinor)dashMinor.style.display=tab==='minor'?'':'none';
+  if(dashCA)dashCA.style.display=tab==='consumer'?'':'none';
+  if(dashSuit)dashSuit.style.display=tab==='lawsuit'?'':'none';
+  // 각 영역 렌더
+  if(tab==='minor')renderMinorDash();
+  if(tab==='consumer')renderCADash();
+  if(tab==='lawsuit')renderSuitDash();
+}
+function renderMinorDash(){
+  const today=new Date().toISOString().slice(0,10);
+  const from=getDashFrom(),to=today;
+  const lg=($('d-lg')||{}).value||'';
+  const filtered=minorClaims.filter(m=>{
+    const dt=m.adate||m.idate||'';
+    return (!from||dt>=from)&&(!to||dt<=to)&&(!lg||m.logistics===lg);
+  });
+  const tot=filtered.length;
+  const byS={};filtered.forEach(m=>{byS[m.status]=(byS[m.status]||0)+1;});
+  const grid=$('minor-dash-grid');
+  if(grid)grid.innerHTML=
+    '<div class="sc"><div class="sl">전체 건수</div><div class="sv bl">'+tot+'건</div></div>'+
+    '<div class="sc"><div class="sl">진행중</div><div class="sv am">'+(filtered.filter(m=>m.status!=='종결'&&m.status!=='취하').length)+'건</div></div>'+
+    '<div class="sc"><div class="sl">종결</div><div class="sv gr">'+(byS['종결']||0)+'건</div></div>'+
+    '<div class="sc"><div class="sl">소비자원 이관</div><div class="sv">'+(filtered.filter(m=>consumerCases.some(c=>c.minorRef===m.id)).length)+'건</div></div>';
+  const list=$('minor-dash-list');
+  if(list)list.innerHTML=filtered.slice(0,10).map(m=>'<div class="tr" style="grid-template-columns:130px 1fr 70px 80px 88px;cursor:pointer;" data-minor-id="'+m.id+'">'+
+    '<span style="font-family:var(--mono);font-size:10px;color:var(--green);">'+m.id+'</span>'+
+    '<span>'+m.name+' - '+(m.desc||'').slice(0,20)+'</span>'+
+    '<span>'+m.type+'</span>'+
+    '<span><span class="bdg b-접수">'+m.status+'</span></span>'+
+    '<span style="font-size:11px;">'+(m.adate||m.idate||'-')+'</span>'+
+  '</div>').join('')||'<div class="empty">해당 기간 소액클레임 없음</div>';
+}
+function renderCADash(){
+  const today=new Date().toISOString().slice(0,10);
+  const from=getDashFrom(),to=today;
+  const filtered=consumerCases.filter(c=>{const dt=c.date||'';return(!from||dt>=from)&&(!to||dt<=to);});
+  const tot=filtered.length;
+  const byType={자율조정:0,피해구제:0,분쟁조정:0};
+  filtered.forEach(c=>{if(byType[c.type]!==undefined)byType[c.type]++;});
+  const ratios=filtered.filter(c=>c.claimAmount>0&&c.amount>0).map(c=>Math.round(c.amount/c.claimAmount*100));
+  const avgRatio=ratios.length?Math.round(ratios.reduce((a,b)=>a+b,0)/ratios.length):null;
+  const grid=$('ca-dash-grid');
+  if(grid)grid.innerHTML=
+    '<div class="sc"><div class="sl">전체 건수</div><div class="sv bl">'+tot+'건</div></div>'+
+    '<div class="sc"><div class="sl">자율조정</div><div class="sv">'+byType['자율조정']+'건</div></div>'+
+    '<div class="sc"><div class="sl">피해구제</div><div class="sv am">'+byType['피해구제']+'건</div></div>'+
+    '<div class="sc"><div class="sl">분쟁조정</div><div class="sv rd">'+byType['분쟁조정']+'건</div></div>'+
+    '<div class="sc"><div class="sl">평균 인용률</div><div class="sv '+(avgRatio===null?'':avgRatio>=50?'gr':'rd')+'">'+(avgRatio!==null?avgRatio+'%':'-')+'</div></div>';
+  const list=$('ca-dash-list');
+  if(list)list.innerHTML=filtered.slice(0,10).map(c=>'<div class="tr" style="grid-template-columns:130px 1fr 80px 70px 88px;cursor:pointer;" data-goto-ca="'+c.id+'">'+
+    '<span style="font-family:var(--mono);font-size:10px;color:var(--blue);">'+(c.no||'-')+'</span>'+
+    '<span>'+c.claimant+' - '+(c.desc||'').slice(0,20)+'</span>'+
+    '<span style="font-size:11px;">'+c.type+'</span>'+
+    '<span><span class="bdg b-접수">'+c.status+'</span></span>'+
+    '<span style="font-size:11px;">'+(c.date||'-')+'</span>'+
+  '</div>').join('')||'<div class="empty">해당 기간 소비자원 없음</div>';
+}
+function renderSuitDash(){
+  const today=new Date().toISOString().slice(0,10);
+  const from=getDashFrom(),to=today;
+  const filtered=lawsuits.filter(s=>{const dt=s.date||'';return(!from||dt>=from)&&(!to||dt<=to);});
+  const tot=filtered.length;
+  const wins=filtered.filter(s=>s.result==='승소'||s.result==='일부승소').length;
+  const losses=filtered.filter(s=>s.result==='패소').length;
+  const pending=filtered.filter(s=>!s.result||s.result==='미확정').length;
+  const totalAmt=filtered.reduce((a,s)=>a+(s.amount||0),0);
+  const grid=$('suit-dash-grid');
+  if(grid)grid.innerHTML=
+    '<div class="sc"><div class="sl">전체 건수</div><div class="sv bl">'+tot+'건</div></div>'+
+    '<div class="sc"><div class="sl">진행중</div><div class="sv am">'+pending+'건</div></div>'+
+    '<div class="sc"><div class="sl">승소/일부승소</div><div class="sv gr">'+wins+'건</div></div>'+
+    '<div class="sc"><div class="sl">패소</div><div class="sv rd">'+losses+'건</div></div>'+
+    '<div class="sc"><div class="sl">소가 합계</div><div class="sv">'+fmt만원(totalAmt)+'</div></div>';
+  const list=$('suit-dash-list');
+  if(list)list.innerHTML=filtered.slice(0,10).map(s=>'<div class="tr" style="grid-template-columns:130px 1fr 70px 80px 88px;cursor:pointer;" data-goto-suit="'+s.id+'">'+
+    '<span style="font-family:var(--mono);font-size:10px;color:var(--red);">'+(s.no||'-')+'</span>'+
+    '<span>'+s.plaintiff+' vs '+s.defendant+'</span>'+
+    '<span style="font-size:11px;">'+s.status+'</span>'+
+    '<span style="font-size:11px;">'+(s.result||'미확정')+'</span>'+
+    '<span style="font-size:11px;">'+(s.nextDate||'-')+'</span>'+
+  '</div>').join('')||'<div class="empty">해당 기간 소송 없음</div>';
+}
+function getDashFrom(){
+  const from=$('d-from');
+  return from?from.value:'';
+}
+
 function renderDash(){
   // 드롭다운 채우기
   const dty=$('d-type');
@@ -535,7 +643,7 @@ function onClientChange(){
 }
 function resetForm(){
   editId=null;$('form-title').textContent='신규 클레임 접수';
-  ['f-name','f-phone','f-addr','f-product','f-tname','f-tid','f-desc','f-note'].forEach(id=>{const e=$(id);if(e)e.value='';});
+  ['f-name','f-phone','f-addr','f-product','f-tname','f-tid','f-desc','f-note','f-career','f-model','f-damage','f-acc-place','f-cause-detail','f-customer-req','f-customer-stmt','f-action','f-tech-stmt','f-review-req','f-edu-place','f-edu-target','f-edu-content','f-prevention'].forEach(id=>{const e=$(id);if(e)e.value='';});
   const fd=$('f-date');if(fd)fd.value=new Date().toISOString().slice(0,10);
   // prefillFromInsRow 중에는 날짜/손해액 초기화 안 함
   if(!_prefilling)['f-idate','f-amt','f-ins-date','f-survey','f-paid','f-logistics'].forEach(id=>{const e=$(id);if(e)e.value='';});  
@@ -563,7 +671,26 @@ function saveClaim(){
   const grp=getGroupByPcat(pcode);
   const newId=editId||genId(new Date().getFullYear(),grp.code,pcode,tcode);
   const d={clientId:cid,client:cName,pcat:pcode,pcatName:pcName,groupId:grp.id,groupCode:grp.code,groupName:grp.name,name,phone:$('f-phone').value,addr:$('f-addr').value,product:$('f-product').value,idate:$('f-idate').value,tname:$('f-tname').value,tid:$('f-tid').value,type:tName,typeCode:tcode,assignee:$('f-asgn').value,amount:Number($('f-amt').value)||0,survey:Number($('f-survey')?$('f-survey').value:0)||0,finalPayment:Number($('f-paid')?$('f-paid').value:0)||0,logistics:$('f-logistics')?$('f-logistics').value||'':'',
-    lineteam:$('f-lineteam')?$('f-lineteam').value||'':'',insDate:$('f-ins-date').value||'',date:$('f-date').value||today,desc,note:$('f-note').value,insCoId,liability:$('f-liability').value||'',evalReflect:$('f-eval').value||''};
+    lineteam:$('f-lineteam')?$('f-lineteam').value||'':'',insDate:$('f-ins-date').value||'',date:$('f-date').value||today,desc,note:$('f-note').value,insCoId,liability:$('f-liability').value||'',evalReflect:$('f-eval').value||'',
+    // 보고서 추가 필드
+    accDate:($('f-acc-date')||{}).value||'',
+    career:($('f-career')||{}).value||'',
+    model:($('f-model')||{}).value||'',
+    damage:($('f-damage')||{}).value||'',
+    accPlace:($('f-acc-place')||{}).value||'',
+    causeDetail:($('f-cause-detail')||{}).value||'',
+    customerReq:($('f-customer-req')||{}).value||'',
+    customerAmt:Number(($('f-customer-amt')||{}).value)||0,
+    customerStmt:($('f-customer-stmt')||{}).value||'',
+    action:($('f-action')||{}).value||'',
+    techStmt:($('f-tech-stmt')||{}).value||'',
+    reviewReq:($('f-review-req')||{}).value||'',
+    eduDate:($('f-edu-date')||{}).value||'',
+    eduPlace:($('f-edu-place')||{}).value||'',
+    eduTarget:($('f-edu-target')||{}).value||'',
+    eduContent:($('f-edu-content')||{}).value||'',
+    prevention:($('f-prevention')||{}).value||'',
+  };
   if(editId){const c=claims.find(x=>x.id===editId);if(c){Object.assign(c,d);c.history=c.history||[];c.history.push({date:today,text:'정보 수정'});}editId=null;}
   else{claims.unshift({id:newId,...d,status:'접수',history:[{date:today,text:'클레임 접수'}]});}
   persist();
@@ -1399,6 +1526,23 @@ function editClaim(){
       const fp=$('f-paid');if(fp)fp.value=c.finalPayment||'';
       const flog=$('f-logistics');if(flog)flog.value=c.logistics||'';
       const flt=$('f-lineteam');if(flt)flt.value=c.lineteam||'';
+    const facd=$('f-acc-date');if(facd)facd.value=c.accDate||'';
+    const fcar=$('f-career');if(fcar)fcar.value=c.career||'';
+    const fmod=$('f-model');if(fmod)fmod.value=c.model||'';
+    const fdmg=$('f-damage');if(fdmg)fdmg.value=c.damage||'';
+    const facp=$('f-acc-place');if(facp)facp.value=c.accPlace||'';
+    const fcau=$('f-cause-detail');if(fcau)fcau.value=c.causeDetail||'';
+    const fcrq=$('f-customer-req');if(fcrq)fcrq.value=c.customerReq||'';
+    const fcam=$('f-customer-amt');if(fcam)fcam.value=c.customerAmt||'';
+    const fcst=$('f-customer-stmt');if(fcst)fcst.value=c.customerStmt||'';
+    const fact=$('f-action');if(fact)fact.value=c.action||'';
+    const ftst=$('f-tech-stmt');if(ftst)ftst.value=c.techStmt||'';
+    const frrq=$('f-review-req');if(frrq)frrq.value=c.reviewReq||'';
+    const fedt=$('f-edu-date');if(fedt)fedt.value=c.eduDate||'';
+    const fedp=$('f-edu-place');if(fedp)fedp.value=c.eduPlace||'';
+    const fedt2=$('f-edu-target');if(fedt2)fedt2.value=c.eduTarget||'';
+    const fedc=$('f-edu-content');if(fedc)fedc.value=c.eduContent||'';
+    const fprev=$('f-prevention');if(fprev)fprev.value=c.prevention||'';
       const el=$('id-preview-code');if(el)el.textContent=c.id+' (수정 중)';
       updateIdPreview();
     },80);
@@ -2403,38 +2547,38 @@ async function downloadReport(claimId){
     const data={
       물류협력업체: c.logistics||'-',
       고객명: c.name||'-',
-      제품명: c.product||'-',
+      제품명: c.model||c.product||'-',
       설치구분: c.groupName||'-',
       사고유형: c.type||'-',
       소속팀: c.lineteam||'-',
       보고자: c.assignee||'-',
       보고일: new Date().toISOString().slice(0,10),
-      사고발생일: c.insDate||c.date||'-',
+      사고발생일: c.accDate||c.insDate||c.date||'-',
       설치기사_차량번호: (c.tname||'-')+(c.tid?' / '+c.tid:''),
       설치기사ID: c.tid||'-',
-      설치경력_계약일자: '-',
+      설치경력_계약일자: c.career||'-',
       설치일: c.idate||'-',
       연락처: c.phone||'-',
-      주문번호: c.orderNo||'-',
+      주문번호: c.orderNo||c.product||'-',
       제품군: c.pcatName||c.pcat||'-',
-      제품_모델_수량: c.product||'-',
+      제품_모델_수량: c.model||c.product||'-',
       귀책여부: c.liability||'-',
       발생원인: c.type||'-',
-      피해현황: c.desc||'-',
-      사고장소_설치위치: c.addr||'-',
-      발생원인_상세: c.desc||'-',
+      피해현황: c.damage||c.desc||'-',
+      사고장소_설치위치: c.accPlace||c.addr||'-',
+      발생원인_상세: c.causeDetail||c.desc||'-',
       사고경위: c.desc||'-',
-      고객요구사항: '-',
-      고객요구금액: c.amount?c.amount.toLocaleString()+'원':'-',
-      고객진술내용: '-',
-      조치사항: (c.history||[]).map(h=>h.text?`${h.date}: ${h.text}`:'').filter(Boolean).join('\n')||'-',
-      설치기사진술내용: '-',
-      검토요청사항: c.note||'-',
-      교육일자: '-',
-      교육장소: '-',
-      교육대상: '-',
-      교육내용: '-',
-      예방대책: '-',
+      고객요구사항: c.customerReq||'-',
+      고객요구금액: c.customerAmt?c.customerAmt.toLocaleString()+'원':(c.amount?c.amount.toLocaleString()+'원':'-'),
+      고객진술내용: c.customerStmt||'-',
+      조치사항: c.action||(c.history||[]).map(h=>h.text?h.date+': '+h.text:'').filter(Boolean).join('\n')||'-',
+      설치기사진술내용: c.techStmt||'-',
+      검토요청사항: c.reviewReq||c.note||'-',
+      교육일자: c.eduDate||'-',
+      교육장소: c.eduPlace||'-',
+      교육대상: c.eduTarget||'-',
+      교육내용: c.eduContent||'-',
+      예방대책: c.prevention||'-',
     };
 
     // Base64 → ArrayBuffer

@@ -20,14 +20,24 @@ function renderPolicyCards(filteredClaims, from, to){
       const dt=c.insDate||c.date||'';
       return groupCodes.includes(c.groupCode)&&(!effFrom||dt>=effFrom)&&(!effTo||dt<=effTo);
     });
+    // G+H(지급보험금+조사비)가 있으면 사용, 없으면 I+J(추산+조사비OS) 사용
+    const totalLoss=pFiltered.reduce((a,c)=>{
+      const hasPaid=(c.finalPayment||0)+(c.survey||0)>0;
+      return a+(hasPaid?(c.finalPayment||0)+(c.survey||0):(c.amount||0)+(c.surveyOS||0));
+    },0);
     const paid=pFiltered.reduce((a,c)=>a+(c.finalPayment||0),0);
+    const survey=pFiltered.reduce((a,c)=>a+(c.survey||0),0);
     const os=pFiltered.filter(c=>c.status!=='종결').reduce((a,c)=>a+(c.amount||0),0);
+    const surveyOS=pFiltered.reduce((a,c)=>a+(c.surveyOS||0),0);
     const limit=p.limit||0;
-    // 손해율 = 지급/한도, 지급율 = 지급/추산
-    const lossR=limit>0?Math.round(paid/limit*100):null;
-    const payR=os>0?Math.round(paid/os*100):null;
-    const remaining=limit>0?limit-paid:null;
-    const barPct=limit>0?Math.min(Math.round(paid/limit*100),100):0;
+    // 손해율 = (지급+조사비+추산+조사비OS) / 한도
+    const lossR=limit>0?Math.round(totalLoss/limit*100):null;
+    // 지급율 = (지급+조사비) / (추산+조사비OS)
+    const totalOS=os+surveyOS;
+    const totalPaid=paid+survey;
+    const payR=totalOS>0?Math.round(totalPaid/totalOS*100):null;
+    const remaining=limit>0?limit-totalLoss:null;
+    const barPct=limit>0?Math.min(Math.round(totalLoss/limit*100),100):0;
     const barColor=lossR===null?'var(--bd2)':lossR>=80?'#E24B4A':lossR>=60?'#EF9F27':'#639922';
 
     html+=`<div style="grid-column:span 4;background:var(--bg1);border:0.5px solid var(--bd2);border-radius:var(--r-lg);padding:12px 16px;margin-bottom:8px;">
@@ -40,19 +50,19 @@ function renderPolicyCards(filteredClaims, from, to){
       </div>
       <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:10px;">
         <div style="background:var(--bg2);border-radius:var(--r-md);padding:8px 10px;">
-          <div style="font-size:11px;color:var(--tx2);margin-bottom:3px;">지급보험금</div>
-          <div style="font-size:15px;font-weight:500;color:var(--blue);">${fmt만원(paid)}</div>
+          <div style="font-size:11px;color:var(--tx2);margin-bottom:3px;">지급+조사비</div>
+          <div style="font-size:15px;font-weight:500;color:var(--blue);">${fmt만원(totalPaid)}</div>
         </div>
         <div style="background:var(--bg2);border-radius:var(--r-md);padding:8px 10px;">
-          <div style="font-size:11px;color:var(--tx2);margin-bottom:3px;">추산 O/S</div>
-          <div style="font-size:15px;font-weight:500;">${fmt만원(os)}</div>
+          <div style="font-size:11px;color:var(--tx2);margin-bottom:3px;">추산+조사비OS</div>
+          <div style="font-size:15px;font-weight:500;">${fmt만원(totalOS)}</div>
         </div>
         <div style="background:var(--bg2);border-radius:var(--r-md);padding:8px 10px;">
           <div style="font-size:11px;color:var(--tx2);margin-bottom:3px;">보상한도</div>
           <div style="font-size:15px;font-weight:500;">${fmt만원(limit)}</div>
         </div>
         <div style="background:var(--bg2);border-radius:var(--r-md);padding:8px 10px;">
-          <div style="font-size:11px;color:var(--tx2);margin-bottom:3px;">손해율 (지급/한도)</div>
+          <div style="font-size:11px;color:var(--tx2);margin-bottom:3px;">손해율 (합산/한도)</div>
           <div style="font-size:15px;font-weight:500;color:${lossR===null?'var(--tx3)':lossR>=80?'#E24B4A':lossR>=60?'#EF9F27':'var(--green)'};">${lossR!==null?lossR+'%':'-'}</div>
         </div>
         <div style="background:var(--bg2);border-radius:var(--r-md);padding:8px 10px;">
@@ -471,11 +481,11 @@ function switchDashTab(tab){
   if(dashSuit)dashSuit.style.display=tab==='lawsuit'?'':'none';
   // 각 영역 렌더
   if(tab==='claim')renderDash();
-  else if(tab==='minor')renderMinorDash();
+  else if(tab==='minor')renderMinorDashboard();
   else if(tab==='consumer')renderCADash();
   else if(tab==='lawsuit')renderSuitDash();
 }
-function renderMinorDash(){
+function renderMinorDashboard(){
   const today=new Date().toISOString().slice(0,10);
   const from=getDashFrom(),to=($('d-to')||{}).value||today;
   const lg=($('d-lg')||{}).value||'';
@@ -1308,7 +1318,7 @@ function autoCreateClaims(newRows, insId){
       insDate:r.접수일||'',date:today,
       desc:r.피해내용||'-',
       note:`보험사 접수번호: ${r.접수번호} / 손해사정: ${r.손해사정담당자||'-'} ${r.손해사정연락처||''}`.trim(),
-      survey:r.조사비OS||0,finalPayment:r.지급보험금||0,
+      survey:r.조사비||0,surveyOS:r.조사비OS||0,finalPayment:r.지급보험금||0,
       logistics:r.물류센터||'',orderNo:r.설치주문번호||'',
       insCoId:insId,insNo:r.접수번호,
       liability,evalReflect,status:claimStatus,
@@ -2320,18 +2330,23 @@ function renderHistoryEditable(history, onUpdate){
         <div style="height:1px;flex:1;background:var(--bd3);"></div>
       </div>`;
     } else {
-      html+=`<div class="tl-i" style="align-items:flex-start;">
-        <div class="tl-d" style="margin-top:3px;"></div>
-        <div class="tl-ln"></div>
-        <div style="flex:1;">
-          <div id="hist-text-${i}" style="font-size:13px;white-space:pre-line;">${h.text||''}</div>
-          <div class="tl-dt">${h.date||''}</div>
-        </div>
-        <div style="display:flex;gap:4px;margin-left:8px;flex-shrink:0;">
-          <button class="btn sm icon" data-hist-edit="${i}" title="수정"><svg class="ico ico-sm"><use href="#ico-pencil"/></svg></button>
-          <button class="btn sm icon dng" data-hist-del="${i}" title="삭제"><svg class="ico ico-sm"><use href="#ico-trash"/></svg></button>
-        </div>
-      </div>`;
+      const txt=h.text||'';
+      const lines=txt.split('\n');
+      const title=lines[0];
+      const body=lines.slice(1).join('\n').trim();
+      html+='<div class="tl-i" style="align-items:flex-start;">'+
+        '<div class="tl-d" style="margin-top:3px;"></div>'+
+        '<div class="tl-ln"></div>'+
+        '<div style="flex:1;">'+
+          '<div id="hist-text-'+i+'" style="font-size:13px;font-weight:400;">'+title+'</div>'+
+          '<div class="tl-dt">'+(h.date||'')+'</div>'+
+          (body?'<div style="margin-top:5px;padding:7px 10px;background:var(--bg2);border-radius:var(--r-md);font-size:12px;color:var(--tx2);white-space:pre-wrap;">'+body+'</div>':'')+
+        '</div>'+
+        '<div style="display:flex;gap:4px;margin-left:8px;flex-shrink:0;">'+
+          '<button class="btn sm icon" data-hist-edit="'+i+'" title="수정"><svg class="ico ico-sm"><use href="#ico-pencil"/></svg></button>'+
+          '<button class="btn sm icon dng" data-hist-del="'+i+'" title="삭제"><svg class="ico ico-sm"><use href="#ico-trash"/></svg></button>'+
+        '</div>'+
+      '</div>';
     }
   });
   return html;
@@ -2664,7 +2679,7 @@ function bindPhotoUpload(claimId){
 async function downloadReport(claimId){
   const c=claims.find(x=>x.id===claimId);if(!c){alert('클레임을 찾을 수 없습니다.');return;}
 
-  if(typeof PizZip==='undefined'||typeof Docxtemplater==='undefined'){
+  if(typeof PizZip==='undefined'||typeof window.docxtemplater==='undefined'){
     alert('보고서 라이브러리 로딩 중입니다. 잠시 후 다시 시도해주세요.');return;
   }
   if(typeof REPORT_TEMPLATE_B64==='undefined'){
@@ -2720,7 +2735,7 @@ async function downloadReport(claimId){
     for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
 
     const zip=new PizZip(bytes.buffer);
-    const doc=new Docxtemplater(zip,{
+    const doc=new window.docxtemplater(zip,{
       paragraphLoop:true,
       linebreaks:true,
       delimiters:{start:'{{',end:'}}'},

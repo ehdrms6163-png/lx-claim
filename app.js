@@ -2758,7 +2758,6 @@ function injectImagesIntoDocx(zipObj, photos, slots){
     let relsXml=relsFile.asText();
     let ctXml=ctFile.asText();
 
-    // 기존 rId 최대값 파악 → 충돌 방지
     const existingIds=(relsXml.match(/Id="rId(\d+)"/g)||[]).map(m=>parseInt(m.match(/\d+/)[0]));
     let rIdNum=(existingIds.length?Math.max(...existingIds):0)+1;
     let imgSeq=1;
@@ -2767,31 +2766,44 @@ function injectImagesIntoDocx(zipObj, photos, slots){
     slots.forEach(slot=>{
       const photo=photos[slot];
       if(!photo||!photo.data)return;
-      if(!docXml.includes(`{%${slot}}`))return;
+
+      const tag=`{%${slot}}`;
+      const tagIdx=docXml.indexOf(tag);
+      if(tagIdx===-1){return;}
+
+      // {%slot} 위치에서 역방향으로 <w:r 태그 탐색 (속성 있어도 매칭)
+      let runStart=-1;
+      for(let i=tagIdx-1;i>=0;i--){
+        if(docXml[i]==='<'&&docXml.substring(i,i+4)==='<w:r'){
+          const c=docXml[i+4];
+          if(c==='>'||c===' '||c==='\n'||c==='\t'||c==='\r'){runStart=i;break;}
+        }
+      }
+      if(runStart===-1){console.warn(`[이미지삽입] ${slot}: <w:r> 시작 미발견`);return;}
+
+      // {%slot} 이후 첫 번째 </w:r> 탐색
+      const closeTag='</w:r>';
+      const runEnd=docXml.indexOf(closeTag,tagIdx);
+      if(runEnd===-1){console.warn(`[이미지삽입] ${slot}: <w:r> 종료 미발견`);return;}
 
       const rId=`rId${rIdNum++}`;
       const imgName=`img_${imgSeq++}`;
       const ext='jpeg';
       const mediaTarget=`media/${imgName}.${ext}`;
 
-      // ZIP에 이미지 바이트 추가
       const imgBytes=Uint8Array.from(atob(photo.data),c=>c.charCodeAt(0));
       zipObj.file(`word/${mediaTarget}`,imgBytes);
 
-      // 관계(rels) 추가
       relsXml=relsXml.replace('</Relationships>',
         `<Relationship Id="${rId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="${mediaTarget}"/></Relationships>`);
 
-      // 콘텐츠 타입 추가 (최초 1회)
       if(!jpegCtAdded){
         ctXml=ctXml.replace('</Types>',`<Default Extension="${ext}" ContentType="image/jpeg"/></Types>`);
         jpegCtAdded=true;
       }
 
-      // 이미지 크기: 314×234px → EMU (1px=9525 EMU @96dpi)
-      const cx=314*9525; // 2990850
-      const cy=234*9525; // 2228850
-
+      const cx=314*9525;
+      const cy=234*9525;
       const drawing=
         `<w:drawing>`+
         `<wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" distT="0" distB="0" distL="0" distR="0">`+
@@ -2814,21 +2826,9 @@ function injectImagesIntoDocx(zipObj, photos, slots){
         `</pic:pic></a:graphicData></a:graphic>`+
         `</wp:inline></w:drawing>`;
 
-      // <w:r>...<w:t>{%slot}</w:t></w:r> 패턴을 이미지 run으로 교체
-      const runRe=new RegExp(
-        `<w:r>(?:<w:rPr>[\\s\\S]*?<\\/w:rPr>)?<w:t[^>]*>\\{%${slot}\\}<\\/w:t><\\/w:r>`,
-        'g'
-      );
-      const replaced=docXml.replace(runRe,`<w:r>${drawing}</w:r>`);
-      if(replaced===docXml){
-        // 태그가 여러 run에 분산된 경우 단순 문자열 치환
-        docXml=docXml.replace(
-          new RegExp(`\\{%${slot}\\}`,'g'),
-          `</w:t></w:r><w:r>${drawing}</w:r><w:r><w:t xml:space="preserve">`
-        );
-      }else{
-        docXml=replaced;
-      }
+      // runStart~runEnd+6 범위를 이미지 run으로 정밀 교체
+      docXml=docXml.substring(0,runStart)+`<w:r>${drawing}</w:r>`+docXml.substring(runEnd+closeTag.length);
+      console.log(`[이미지삽입] ${slot}: 삽입 완료`);
     });
 
     zipObj.file('word/document.xml',docXml);

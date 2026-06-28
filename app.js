@@ -2832,22 +2832,27 @@ async function downloadReport(claimId){
     });
     doc1.render(data);
 
-    // 2단계: { } 딜리미터로 이미지 태그 {%사진} 렌더링 (renderAsync 필수)
+    // 2단계: { } 딜리미터로 이미지 태그 {%사진} 렌더링
+    // tagValue가 문자열(base64)이어야 imagemodule이 getImage를 정상 호출함
     const imgModules=[];
     if(typeof window.ImageModule!=='undefined'){
       imgModules.push(new window.ImageModule({
         centered:false,
-        getImage:(tag)=>tag&&tag.data?Uint8Array.from(atob(tag.data),c=>c.charCodeAt(0)):null,
+        getImage:(tag)=>{
+          if(!tag||typeof tag!=='string')return null;
+          try{return Uint8Array.from(atob(tag),c=>c.charCodeAt(0));}
+          catch(e){return null;}
+        },
         getSize:()=>[314,234],
       }));
     }
     let finalZip=doc1.getZip();
     if(imgModules.length>0&&Object.keys(photos).length>0){
       try{
-        // ZIP 재사용 방지: pass1 결과로 새 PizZip 생성
         const freshZip=new PizZip(doc1.getZip().generate({type:'arraybuffer'}));
         const imgData={};
-        slots.forEach(s=>{if(photos[s])imgData[s]=photos[s];});
+        // base64 문자열을 직접 전달 (객체가 아닌 string이어야 getImage 경로 진입)
+        slots.forEach(s=>{if(photos[s]&&photos[s].data)imgData[s]=photos[s].data;});
         const doc2=new window.docxtemplater(freshZip,{
           paragraphLoop:true,
           linebreaks:true,
@@ -2855,8 +2860,7 @@ async function downloadReport(claimId){
           modules:imgModules,
           nullGetter:()=>'',
         });
-        // renderAsync: resolve 단계에서 getImage 정상 호출됨
-        await doc2.renderAsync(imgData);
+        doc2.render(imgData);
         finalZip=doc2.getZip();
       }catch(e){console.warn('[보고서] 이미지 렌더링 실패:',e);}
     }

@@ -2745,6 +2745,101 @@ function bindPhotoUpload(claimId){
 }
 
 /* ══════════════════════════════════════════════
+   OOXML 직접 이미지 삽입
+══════════════════════════════════════════════ */
+function injectImagesIntoDocx(zipObj, photos, slots){
+  try{
+    const docFile=zipObj.file('word/document.xml');
+    const relsFile=zipObj.file('word/_rels/document.xml.rels');
+    const ctFile=zipObj.file('[Content_Types].xml');
+    if(!docFile||!relsFile||!ctFile){console.warn('[이미지삽입] 필수 파일 누락');return;}
+
+    let docXml=docFile.asText();
+    let relsXml=relsFile.asText();
+    let ctXml=ctFile.asText();
+
+    // 기존 rId 최대값 파악 → 충돌 방지
+    const existingIds=(relsXml.match(/Id="rId(\d+)"/g)||[]).map(m=>parseInt(m.match(/\d+/)[0]));
+    let rIdNum=(existingIds.length?Math.max(...existingIds):0)+1;
+    let imgSeq=1;
+    let jpegCtAdded=ctXml.includes('image/jpeg');
+
+    slots.forEach(slot=>{
+      const photo=photos[slot];
+      if(!photo||!photo.data)return;
+      if(!docXml.includes(`{%${slot}}`))return;
+
+      const rId=`rId${rIdNum++}`;
+      const imgName=`img_${imgSeq++}`;
+      const ext='jpeg';
+      const mediaTarget=`media/${imgName}.${ext}`;
+
+      // ZIP에 이미지 바이트 추가
+      const imgBytes=Uint8Array.from(atob(photo.data),c=>c.charCodeAt(0));
+      zipObj.file(`word/${mediaTarget}`,imgBytes);
+
+      // 관계(rels) 추가
+      relsXml=relsXml.replace('</Relationships>',
+        `<Relationship Id="${rId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="${mediaTarget}"/></Relationships>`);
+
+      // 콘텐츠 타입 추가 (최초 1회)
+      if(!jpegCtAdded){
+        ctXml=ctXml.replace('</Types>',`<Default Extension="${ext}" ContentType="image/jpeg"/></Types>`);
+        jpegCtAdded=true;
+      }
+
+      // 이미지 크기: 314×234px → EMU (1px=9525 EMU @96dpi)
+      const cx=314*9525; // 2990850
+      const cy=234*9525; // 2228850
+
+      const drawing=
+        `<w:drawing>`+
+        `<wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" distT="0" distB="0" distL="0" distR="0">`+
+        `<wp:extent cx="${cx}" cy="${cy}"/>`+
+        `<wp:effectExtent l="0" t="0" r="0" b="0"/>`+
+        `<wp:docPr id="${rIdNum}" name="${imgName}"/>`+
+        `<wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/></wp:cNvGraphicFramePr>`+
+        `<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">`+
+        `<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">`+
+        `<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">`+
+        `<pic:nvPicPr><pic:cNvPr id="${rIdNum}" name="${imgName}"/><pic:cNvPicPr/></pic:nvPicPr>`+
+        `<pic:blipFill>`+
+        `<a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="${rId}"/>`+
+        `<a:stretch><a:fillRect/></a:stretch>`+
+        `</pic:blipFill>`+
+        `<pic:spPr>`+
+        `<a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm>`+
+        `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>`+
+        `</pic:spPr>`+
+        `</pic:pic></a:graphicData></a:graphic>`+
+        `</wp:inline></w:drawing>`;
+
+      // <w:r>...<w:t>{%slot}</w:t></w:r> 패턴을 이미지 run으로 교체
+      const runRe=new RegExp(
+        `<w:r>(?:<w:rPr>[\\s\\S]*?<\\/w:rPr>)?<w:t[^>]*>\\{%${slot}\\}<\\/w:t><\\/w:r>`,
+        'g'
+      );
+      const replaced=docXml.replace(runRe,`<w:r>${drawing}</w:r>`);
+      if(replaced===docXml){
+        // 태그가 여러 run에 분산된 경우 단순 문자열 치환
+        docXml=docXml.replace(
+          new RegExp(`\\{%${slot}\\}`,'g'),
+          `</w:t></w:r><w:r>${drawing}</w:r><w:r><w:t xml:space="preserve">`
+        );
+      }else{
+        docXml=replaced;
+      }
+    });
+
+    zipObj.file('word/document.xml',docXml);
+    zipObj.file('word/_rels/document.xml.rels',relsXml);
+    zipObj.file('[Content_Types].xml',ctXml);
+  }catch(e){
+    console.warn('[이미지삽입] 오류:',e);
+  }
+}
+
+/* ══════════════════════════════════════════════
    보고서 자동 생성 (docxtemplater)
 ══════════════════════════════════════════════ */
 async function downloadReport(claimId){
@@ -2832,37 +2927,10 @@ async function downloadReport(claimId){
     });
     doc1.render(data);
 
-    // 2단계: { } 딜리미터로 이미지 태그 {%사진} 렌더링
-    // tagValue가 문자열(base64)이어야 imagemodule이 getImage를 정상 호출함
-    const imgModules=[];
-    if(typeof window.ImageModule!=='undefined'){
-      imgModules.push(new window.ImageModule({
-        centered:false,
-        getImage:(tag)=>{
-          if(!tag||typeof tag!=='string')return null;
-          try{return Uint8Array.from(atob(tag),c=>c.charCodeAt(0));}
-          catch(e){return null;}
-        },
-        getSize:()=>[314,234],
-      }));
-    }
-    let finalZip=doc1.getZip();
-    if(imgModules.length>0&&Object.keys(photos).length>0){
-      try{
-        const freshZip=new PizZip(doc1.getZip().generate({type:'arraybuffer'}));
-        const imgData={};
-        // base64 문자열을 직접 전달 (객체가 아닌 string이어야 getImage 경로 진입)
-        slots.forEach(s=>{if(photos[s]&&photos[s].data)imgData[s]=photos[s].data;});
-        const doc2=new window.docxtemplater(freshZip,{
-          paragraphLoop:true,
-          linebreaks:true,
-          delimiters:{start:'{',end:'}'},
-          modules:imgModules,
-          nullGetter:()=>'',
-        });
-        doc2.render(imgData);
-        finalZip=doc2.getZip();
-      }catch(e){console.warn('[보고서] 이미지 렌더링 실패:',e);}
+    // 2단계: OOXML 직접 삽입으로 이미지 추가 (imagemodule 미사용)
+    const finalZip=doc1.getZip();
+    if(Object.keys(photos).length>0){
+      injectImagesIntoDocx(finalZip,photos,slots);
     }
 
     const out=finalZip.generate({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});

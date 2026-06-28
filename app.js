@@ -2593,12 +2593,43 @@ function renderPolicyStats(){
 /* ══════════════════════════════════════════════
    사진 업로드 (Firebase Storage)
 ══════════════════════════════════════════════ */
+function resizeToBase64(file,maxW=800,maxH=600,quality=0.75){
+  return new Promise(resolve=>{
+    const img=new Image();
+    const blobUrl=URL.createObjectURL(file);
+    img.onload=()=>{
+      let w=img.width,h=img.height;
+      if(w>maxW){h=Math.round(h*maxW/w);w=maxW;}
+      if(h>maxH){w=Math.round(w*maxH/h);h=maxH;}
+      const canvas=document.createElement('canvas');
+      canvas.width=w;canvas.height=h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      URL.revokeObjectURL(blobUrl);
+      resolve(canvas.toDataURL('image/jpeg',quality));
+    };
+    img.onerror=()=>{URL.revokeObjectURL(blobUrl);resolve(null);};
+    img.src=blobUrl;
+  });
+}
+
 async function uploadPhoto(claimId, slot, file){
   if(!storage)return null;
   const ext=file.name.split('.').pop();
   const ref=storage.ref(`claims/${claimId}/${slot}.${ext}`);
   await ref.put(file);
-  return await ref.getDownloadURL();
+  const url=await ref.getDownloadURL();
+  // 보고서용 base64를 Firestore에 저장 (CORS 우회)
+  try{
+    const b64full=await resizeToBase64(file);
+    if(b64full&&db){
+      const docId=`photos_${claimId}`;
+      const snap=await db.collection('lx-claim').doc(docId).get();
+      const existing=snap.exists?snap.data().value:{};
+      existing[slot]={data:b64full.split(',')[1],extension:'jpeg'};
+      await db.collection('lx-claim').doc(docId).set({value:existing});
+    }
+  }catch(e){console.warn('사진 Firestore 저장 실패:',e);}
+  return url;
 }
 
 async function getClaimPhotos(claimId){
@@ -2671,6 +2702,12 @@ async function loadClaimPhotos(claimId){
           const items=(await storage.ref(`claims/${claimId}`).listAll()).items;
           const match=items.find(i=>i.name.startsWith(slot));
           if(match)await match.delete();
+          // Firestore base64도 삭제
+          if(db){
+            const docId=`photos_${claimId}`;
+            const snap=await db.collection('lx-claim').doc(docId).get();
+            if(snap.exists){const d=snap.data().value||{};delete d[slot];await db.collection('lx-claim').doc(docId).set({value:d});}
+          }
           const div=document.getElementById(`photo-${slot}`);
           if(div){
             div.innerHTML=`<span style="font-size:11px;color:var(--tx3);">${slot}</span>`;
@@ -2770,43 +2807,27 @@ async function downloadReport(claimId){
     const bytes=new Uint8Array(binary.length);
     for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
 
-    // Firebase Storage에서 사진 로드
+    // Firestore에서 사진 base64 로드 (CORS 우회)
     let photos={};
-    if(storage){
+    if(db){
       try{
-        const listResult=await storage.ref(`claims/${claimId}`).listAll();
-        await Promise.all(listResult.items.map(async item=>{
-          const slot=item.name.replace(/\.[^.]+$/,'');
-          const url=await item.getDownloadURL();
-          // URL → base64
-          // XMLHttpRequest로 시도 (CORS 우회)
-          const b64 = await new Promise((res, rej)=>{
-            const xhr = new XMLHttpRequest();
-            xhr.open('GET', url, true);
-            xhr.responseType = 'arraybuffer';
-            xhr.onload = ()=>{
-              if(xhr.status===200){
-                const arr = new Uint8Array(xhr.response);
-                let str='';
-                arr.forEach(b=>str+=String.fromCharCode(b));
-                res(btoa(str));
-              } else rej(new Error('HTTP '+xhr.status));
-            };
-            xhr.onerror = ()=>rej(new Error('XHR error'));
-            xhr.send();
-          });
-          photos[slot]={data:b64,extension:item.name.split('.').pop()};
-        }));
+        const snap=await db.collection('lx-claim').doc(`photos_${claimId}`).get();
+        if(snap.exists)photos=snap.data().value||{};
       }catch(e){console.warn('사진 로드 실패:',e);}
     }
 
-    // 이미지 플레이스홀더 데이터 추가
+    // 이미지 플레이스홀더 데이터 추가 (없는 슬롯은 null)
     const slots=['설치사진1','설치사진2','설치사진3','설치사진4','피해사진1','피해사진2','피해사진3','피해사진4','재방문사진1','재방문사진2','교육사진1','교육사진2'];
     slots.forEach(s=>{
-      if(photos[s])data[s]=photos[s];
+      data[s]=photos[s]||null;
     });
 
     const zip=new PizZip(bytes.buffer);
+
+    // 진단 로그
+    console.log('[보고서] ImageModule 로드됨:', typeof window.ImageModule!=='undefined');
+    console.log('[보고서] 로드된 사진 슬롯:', Object.keys(photos));
+    console.log('[보고서] 사진 데이터 샘플:', Object.entries(photos).slice(0,1).map(([k,v])=>`${k}: ${v?.data?.slice(0,20)}...`));
 
     // 이미지 모듈 설정
     const modules=[];

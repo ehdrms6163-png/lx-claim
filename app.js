@@ -2824,40 +2824,41 @@ async function downloadReport(claimId){
 
     const zip=new PizZip(bytes.buffer);
 
-    // 진단 로그
-    console.log('[보고서] ImageModule 로드됨:', typeof window.ImageModule!=='undefined');
-    console.log('[보고서] 로드된 사진 슬롯:', Object.keys(photos));
-    console.log('[보고서] 사진 데이터 샘플:', Object.entries(photos).slice(0,1).map(([k,v])=>`${k}: ${v?.data?.slice(0,20)}...`));
-    // 템플릿 내 태그 형식 전체 확인
-    const _docXml=zip.file('word/document.xml');
-    if(_docXml){
-      const _xml=_docXml.asText();
-      const _double=_xml.match(/\{\{[^}]+\}\}/g);
-      const _single=_xml.match(/\{[^{][^}]*\}/g);
-      console.log('[보고서] 이중괄호 태그 {{...}}:', _double?[...new Set(_double)]:'없음');
-      console.log('[보고서] 단일괄호 태그 {%...} 포함:', _single?[...new Set(_single)].filter(t=>t.includes('%')):'없음');
-    }
+    // 1단계: {{ }} 딜리미터로 텍스트 필드 렌더링
+    const doc1=new window.docxtemplater(zip,{
+      paragraphLoop:true,
+      linebreaks:true,
+      delimiters:{start:'{{',end:'}}'},
+    });
+    doc1.render(data);
+    const zip2=doc1.getZip();
 
-
-    // 이미지 모듈 설정
-    const modules=[];
+    // 2단계: { } 딜리미터로 이미지 태그 {%사진} 렌더링
+    const imgModules=[];
     if(typeof window.ImageModule!=='undefined'){
-      modules.push(new window.ImageModule({
+      imgModules.push(new window.ImageModule({
         centered:false,
         getImage:(tag)=>tag&&tag.data?Uint8Array.from(atob(tag.data),c=>c.charCodeAt(0)):null,
         getSize:()=>[314,234],
       }));
     }
+    let finalZip=zip2;
+    if(imgModules.length>0){
+      try{
+        const imgData={};
+        slots.forEach(s=>{imgData[s]=photos[s]||null;});
+        const doc2=new window.docxtemplater(zip2,{
+          paragraphLoop:true,
+          linebreaks:true,
+          delimiters:{start:'{',end:'}'},
+          modules:imgModules,
+        });
+        doc2.render(imgData);
+        finalZip=doc2.getZip();
+      }catch(e){console.warn('[보고서] 이미지 렌더링 실패:',e);}
+    }
 
-    const doc=new window.docxtemplater(zip,{
-      paragraphLoop:true,
-      linebreaks:true,
-      delimiters:{start:'{{',end:'}}'},
-      modules:modules,
-    });
-    doc.render(data);
-
-    const out=doc.getZip().generate({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+    const out=finalZip.generate({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
     const url=URL.createObjectURL(out);
     const a=document.createElement('a');
     a.href=url;

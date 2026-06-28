@@ -2828,6 +2828,16 @@ async function downloadReport(claimId){
     console.log('[보고서] ImageModule 로드됨:', typeof window.ImageModule!=='undefined');
     console.log('[보고서] 로드된 사진 슬롯:', Object.keys(photos));
     console.log('[보고서] 사진 데이터 샘플:', Object.entries(photos).slice(0,1).map(([k,v])=>`${k}: ${v?.data?.slice(0,20)}...`));
+    // 템플릿 내 태그 형식 전체 확인
+    const _docXml=zip.file('word/document.xml');
+    if(_docXml){
+      const _xml=_docXml.asText();
+      const _double=_xml.match(/\{\{[^}]+\}\}/g);
+      const _single=_xml.match(/\{[^{][^}]*\}/g);
+      console.log('[보고서] 이중괄호 태그 {{...}}:', _double?[...new Set(_double)]:'없음');
+      console.log('[보고서] 단일괄호 태그 {%...} 포함:', _single?[...new Set(_single)].filter(t=>t.includes('%')):'없음');
+    }
+
 
     // 이미지 모듈 설정
     const modules=[];

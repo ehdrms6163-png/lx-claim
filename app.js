@@ -2831,9 +2831,8 @@ async function downloadReport(claimId){
       delimiters:{start:'{{',end:'}}'},
     });
     doc1.render(data);
-    const zip2=doc1.getZip();
 
-    // 2단계: { } 딜리미터로 이미지 태그 {%사진} 렌더링
+    // 2단계: { } 딜리미터로 이미지 태그 {%사진} 렌더링 (renderAsync 필수)
     const imgModules=[];
     if(typeof window.ImageModule!=='undefined'){
       imgModules.push(new window.ImageModule({
@@ -2842,18 +2841,22 @@ async function downloadReport(claimId){
         getSize:()=>[314,234],
       }));
     }
-    let finalZip=zip2;
-    if(imgModules.length>0){
+    let finalZip=doc1.getZip();
+    if(imgModules.length>0&&Object.keys(photos).length>0){
       try{
+        // ZIP 재사용 방지: pass1 결과로 새 PizZip 생성
+        const freshZip=new PizZip(doc1.getZip().generate({type:'arraybuffer'}));
         const imgData={};
-        slots.forEach(s=>{imgData[s]=photos[s]||null;});
-        const doc2=new window.docxtemplater(zip2,{
+        slots.forEach(s=>{if(photos[s])imgData[s]=photos[s];});
+        const doc2=new window.docxtemplater(freshZip,{
           paragraphLoop:true,
           linebreaks:true,
           delimiters:{start:'{',end:'}'},
           modules:imgModules,
+          nullGetter:()=>'',
         });
-        doc2.render(imgData);
+        // renderAsync: resolve 단계에서 getImage 정상 호출됨
+        await doc2.renderAsync(imgData);
         finalZip=doc2.getZip();
       }catch(e){console.warn('[보고서] 이미지 렌더링 실패:',e);}
     }

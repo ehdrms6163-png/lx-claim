@@ -101,36 +101,105 @@ function onDashInsChange(){
 }
 
 /* ══════════════════════════════════════════════
-   FIREBASE 초기화
+   데이터 레이어 — Firebase 구현
+   내부 서버로 교체 시 이 블록의 메서드 본문만 수정하세요.
+   외부 인터페이스(메서드 이름·시그니처)는 유지해야 합니다.
+
+   인터페이스 요약:
+     DB.init()                              — 백엔드 초기화
+     DB.get(key, defaultVal)               — 키-값 읽기
+     DB.set(key, value)                    — 키-값 쓰기
+     DB.uploadFile(claimId, slot, file)    — 사진 파일 업로드 → URL 반환
+     DB.listFiles(claimId)                 — [{slot, url}] 반환
+     DB.deleteFile(claimId, slot)          — 사진 파일 삭제
+     DB.getPhotoData(claimId)              — base64 맵 반환 (보고서용)
+     DB.setPhotoData(claimId, slot, data)  — base64 저장 (data=null이면 삭제)
 ══════════════════════════════════════════════ */
-const firebaseConfig = {
-  apiKey: "AIzaSyAy6HPR4oihXAZq_1oLdlfH_Ol2LRfwzAo",
-  authDomain: "lx-claim.firebaseapp.com",
-  projectId: "lx-claim",
-  storageBucket: "lx-claim.firebasestorage.app",
-  messagingSenderId: "64279299234",
-  appId: "1:64279299234:web:67237c233f372e99f043fb"
-};
+const DB = (() => {
+  const FIREBASE_CONFIG = {
+    apiKey: "AIzaSyAy6HPR4oihXAZq_1oLdlfH_Ol2LRfwzAo",
+    authDomain: "lx-claim.firebaseapp.com",
+    projectId: "lx-claim",
+    storageBucket: "lx-claim.firebasestorage.app",
+    messagingSenderId: "64279299234",
+    appId: "1:64279299234:web:67237c233f372e99f043fb"
+  };
+  const COLLECTION = 'lx-claim';
 
-let db, storage;
-function initFirebase(){
-  try{
-    firebase.initializeApp(firebaseConfig);
-    db=firebase.firestore();
-    storage=firebase.storage();
-  }catch(e){console.error('Firebase 초기화 오류:',e);}
-}
+  let _db = null, _storage = null;
 
-async function fsGet(docId,def){
-  try{
-    const snap=await db.collection('lx-claim').doc(docId).get();
-    return snap.exists?snap.data().value:def;
-  }catch(e){return def;}
-}
-async function fsSet(docId,value){
-  try{await db.collection('lx-claim').doc(docId).set({value});}
-  catch(e){console.error('Firestore 저장 오류:',e);}
-}
+  function init() {
+    try {
+      firebase.initializeApp(FIREBASE_CONFIG);
+      _db = firebase.firestore();
+      _storage = firebase.storage();
+    } catch(e) { console.error('Firebase 초기화 오류:', e); }
+  }
+
+  // ── 키-값 저장소 ──────────────────────────────
+  async function get(key, defaultVal) {
+    try {
+      const snap = await _db.collection(COLLECTION).doc(key).get();
+      return snap.exists ? snap.data().value : defaultVal;
+    } catch(e) { return defaultVal; }
+  }
+
+  async function set(key, value) {
+    try {
+      await _db.collection(COLLECTION).doc(key).set({ value });
+    } catch(e) { console.error('Firestore 저장 오류:', e); }
+  }
+
+  // ── 사진 파일 저장소 ──────────────────────────
+  async function uploadFile(claimId, slot, file) {
+    if (!_storage) return null;
+    const ext = file.name.split('.').pop();
+    const ref = _storage.ref(`claims/${claimId}/${slot}.${ext}`);
+    await ref.put(file);
+    return await ref.getDownloadURL();
+  }
+
+  async function listFiles(claimId) {
+    if (!_storage) return [];
+    try {
+      const result = await _storage.ref(`claims/${claimId}`).listAll();
+      return await Promise.all(result.items.map(async item => ({
+        slot: item.name.replace(/\.[^.]+$/, ''),
+        url: await item.getDownloadURL(),
+      })));
+    } catch(e) { return []; }
+  }
+
+  async function deleteFile(claimId, slot) {
+    if (!_storage) return;
+    try {
+      const items = (await _storage.ref(`claims/${claimId}`).listAll()).items;
+      const match = items.find(i => i.name.startsWith(slot));
+      if (match) await match.delete();
+    } catch(e) { console.warn('파일 삭제 실패:', e); }
+  }
+
+  // ── 사진 base64 (보고서용 CORS 우회) ───────────
+  async function getPhotoData(claimId) {
+    try {
+      const snap = await _db.collection(COLLECTION).doc(`photos_${claimId}`).get();
+      return snap.exists ? snap.data().value || {} : {};
+    } catch(e) { return {}; }
+  }
+
+  async function setPhotoData(claimId, slot, data) {
+    try {
+      const docId = `photos_${claimId}`;
+      const snap = await _db.collection(COLLECTION).doc(docId).get();
+      const existing = snap.exists ? snap.data().value || {} : {};
+      if (data === null) delete existing[slot];
+      else existing[slot] = data;
+      await _db.collection(COLLECTION).doc(docId).set({ value: existing });
+    } catch(e) { console.warn('사진 데이터 저장 실패:', e); }
+  }
+
+  return { init, get, set, uploadFile, listFiles, deleteFile, getPhotoData, setPhotoData };
+})();
 
 
 const COLORS=['#185FA5','#3B6D11','#BA7517','#A32D2D','#534AB7','#888780','#0E7C7B','#7D3C98'];
@@ -143,21 +212,21 @@ function saveApiKey(v){apiKey=v;localStorage.setItem('api_key',v);$('api-key-sta
 
 /* 마스터 데이터 */
 let clients, insCompanies, clientMapping, assignees, accidentTypes, productGroups, productCats, claims, epRecs, insFiles, templates, curInsCoId;
-let consumerCases=[], lawsuits=[], minorClaims=[], policySettings=[];
+let consumerCases=[], lawsuits=[], minorClaims=[], policySettings=[], addressbook=[];
 let editId=null, curDetail=null;
 let selInsColor=COLORS[0];
 
 function defData(){
-  clients=[{id:'c1',name:'비렉스테크',memo:''},{id:'c2',name:'코웨이',memo:''},{id:'c3',name:'하츠',memo:''},{id:'c4',name:'경동',memo:''}];
+  clients=[{id:'c-lg',name:'LG전자',memo:''},{id:'c1',name:'비렉스테크',memo:''},{id:'c2',name:'코웨이',memo:''},{id:'c3',name:'하츠',memo:''},{id:'c4',name:'경동',memo:''}];
   insCompanies=[{id:'i1',name:'삼성화재',color:'#185FA5',memo:'1588-5114'},{id:'i2',name:'DB손해보험',color:'#3B6D11',memo:'1588-0100'},{id:'i3',name:'현대해상',color:'#BA7517',memo:'1588-5656'},{id:'i4',name:'KB손해보험',color:'#A32D2D',memo:'1544-0014'}];
   clientMapping={c1:'i1',c2:'i2',c3:'i3',c4:'i2'};
   assignees=[{id:'a1',name:'설용환',rank:'팀장',area:'전체'},{id:'a2',name:'동글',rank:'선임',area:'에어컨·냉장고'},{id:'a3',name:'이민준',rank:'주임',area:'세탁기·식기세척기'},{id:'a4',name:'박서연',rank:'사원',area:'기타'}];
   accidentTypes=[{id:'at1',name:'화재',code:'F'},{id:'at2',name:'누수',code:'W'},{id:'at3',name:'파손',code:'D'},{id:'at4',name:'대인',code:'P'},{id:'at5',name:'기타',code:'E'}];
   productGroups=[
-    {id:'pg1',name:'가정설치',code:'HA',desc:'Home Appliance'},
-    {id:'pg2',name:'정수기/빌트인',code:'WB',desc:'Water purifier & Built-in'},
-    {id:'pg3',name:'에어컨 신규',code:'ARN',desc:'Air conditioner New'},
-    {id:'pg4',name:'에어컨 이전',code:'ARR',desc:'Air conditioner Relocation'},
+    {id:'pg1',name:'가정설치',code:'HA',desc:'Home Appliance',clientId:'c-lg'},
+    {id:'pg2',name:'정수기/빌트인',code:'WB',desc:'Water purifier & Built-in',clientId:'c-lg'},
+    {id:'pg3',name:'에어컨 신규',code:'ARN',desc:'Air conditioner New',clientId:'c-lg'},
+    {id:'pg4',name:'에어컨 이전',code:'ARR',desc:'Air conditioner Relocation',clientId:'c-lg'},
   ];
   productCats=[
     {id:'pc1',name:'에어컨',code:'AC',groupId:'pg3'},
@@ -193,43 +262,45 @@ async function load(){
   try{
     defData();
     // Firestore에서 로드 (없으면 기본값 사용)
-    clients      = await fsGet('cfg_clients', clients);
-    insCompanies = await fsGet('cfg_ins', insCompanies);
-    clientMapping= await fsGet('cfg_map', clientMapping);
-    assignees    = await fsGet('cfg_asgn', assignees);
-    accidentTypes= await fsGet('cfg_atypes', accidentTypes);
-    productGroups= await fsGet('cfg_pgroups', productGroups);
-    productCats  = await fsGet('cfg_pcats', productCats);
-    claims       = await fsGet('cls_v8', claims);
-    epRecs       = await fsGet('ep_v8', epRecs);
-    insFiles     = await fsGet('ins_files_v8', insFiles);
-    templates    = await fsGet('tpl_v8', templates);
-    consumerCases= await fsGet('ca_v1', consumerCases);
-    lawsuits     = await fsGet('suit_v1', lawsuits);
-    minorClaims  = await fsGet('minor_v1', minorClaims);
-    policySettings= await fsGet('policy_v1', policySettings);
-    const m      = await fsGet('ep_col_map', {});
+    clients      = await DB.get('cfg_clients', clients);
+    insCompanies = await DB.get('cfg_ins', insCompanies);
+    clientMapping= await DB.get('cfg_map', clientMapping);
+    assignees    = await DB.get('cfg_asgn', assignees);
+    accidentTypes= await DB.get('cfg_atypes', accidentTypes);
+    productGroups= await DB.get('cfg_pgroups', productGroups);
+    productCats  = await DB.get('cfg_pcats', productCats);
+    claims       = await DB.get('cls_v8', claims);
+    epRecs       = await DB.get('ep_v8', epRecs);
+    insFiles     = await DB.get('ins_files_v8', insFiles);
+    templates    = await DB.get('tpl_v8', templates);
+    consumerCases= await DB.get('ca_v1', consumerCases);
+    lawsuits     = await DB.get('suit_v1', lawsuits);
+    minorClaims  = await DB.get('minor_v1', minorClaims);
+    policySettings= await DB.get('policy_v1', policySettings);
+    addressbook   = await DB.get('cfg_addressbook', addressbook);
+    const m      = await DB.get('ep_col_map', {});
     ['name','addr','prod','idate','tname','tid'].forEach(k=>{if(m[k]&&$('m-'+k))$('m-'+k).value=m[k];});
   }catch(e){console.error('로드 오류:',e);defData();}
 }
 async function persist(){
   try{
     await Promise.all([
-      fsSet('cfg_clients', clients),
-      fsSet('cfg_ins', insCompanies),
-      fsSet('cfg_map', clientMapping),
-      fsSet('cfg_asgn', assignees),
-      fsSet('cfg_atypes', accidentTypes),
-      fsSet('cfg_pgroups', productGroups),
-      fsSet('cfg_pcats', productCats),
-      fsSet('cls_v8', claims),
-      fsSet('ep_v8', epRecs),
-      fsSet('ins_files_v8', insFiles),
-      fsSet('tpl_v8', templates),
-      fsSet('ca_v1', consumerCases),
-      fsSet('suit_v1', lawsuits),
-      fsSet('minor_v1', minorClaims),
-      fsSet('policy_v1', policySettings),
+      DB.set('cfg_clients', clients),
+      DB.set('cfg_ins', insCompanies),
+      DB.set('cfg_map', clientMapping),
+      DB.set('cfg_asgn', assignees),
+      DB.set('cfg_atypes', accidentTypes),
+      DB.set('cfg_pgroups', productGroups),
+      DB.set('cfg_pcats', productCats),
+      DB.set('cls_v8', claims),
+      DB.set('ep_v8', epRecs),
+      DB.set('ins_files_v8', insFiles),
+      DB.set('tpl_v8', templates),
+      DB.set('ca_v1', consumerCases),
+      DB.set('suit_v1', lawsuits),
+      DB.set('minor_v1', minorClaims),
+      DB.set('policy_v1', policySettings),
+      DB.set('cfg_addressbook', addressbook),
     ]);
   }catch(e){console.error('저장 오류:',e);}
 }
@@ -400,9 +471,9 @@ function showSP(name,btn){
   if(name==='insurance')renderInsList();
   if(name==='mapping')renderCfgMapping();
   if(name==='assignees')renderAsgnList();
-  if(name==='product-groups')renderPgroupList();
+  if(name==='products')renderProductTree();
   if(name==='accident-types')renderAtypeList();
-  if(name==='product-cats')renderPcatList();
+  if(name==='addressbook')renderAddressbook();
 }
 function showInsTab(name,btn){
   document.querySelectorAll('.stab').forEach(b=>b.classList.remove('active'));if(btn)btn.classList.add('active');
@@ -751,10 +822,16 @@ function renderList(){
 ══════════════════════════════════════════════ */
 function populateRegisterDropdowns(){
   const cs=$('f-cs');if(cs)cs.innerHTML='<option value="">선택</option>'+clients.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
-  const pg=$('f-pgroup');if(pg)pg.innerHTML='<option value="">선택</option>'+productGroups.map(g=>`<option value="${g.id}">${g.name} (${g.code})</option>`).join('');
   const pc=$('f-pcat');if(pc)pc.innerHTML='<option value="">선택</option>';
   const ft=$('f-type');if(ft)ft.innerHTML='<option value="">선택</option>'+accidentTypes.map(t=>`<option value="${t.code}">${t.name} (${t.code})</option>`).join('');
   onClientChange();updateIdPreview();
+}
+function _fillPgroupByClient(clientId){
+  const pg=$('f-pgroup');if(!pg)return;
+  const groups=clientId?productGroups.filter(g=>g.clientId===clientId):productGroups;
+  pg.innerHTML='<option value="">선택</option>'+groups.map(g=>`<option value="${g.id}">${g.name} (${g.code})</option>`).join('');
+  const pc=$('f-pcat');if(pc)pc.innerHTML='<option value="">선택</option>';
+  updateIdPreview();
 }
 function onPgroupChange(){
   const gid=($('f-pgroup')||{}).value||'';
@@ -765,6 +842,7 @@ function onPgroupChange(){
 }
 function onClientChange(){
   const cid=($('f-cs')||{}).value||'';
+  _fillPgroupByClient(cid);
   const ins=getInsForClient(cid);
   const sel=$('f-ins-co'),label=$('f-ins-auto');
   if(!sel)return;
@@ -884,12 +962,13 @@ function _initHandlers(){
     epFileClick:()=>$('ep-file').click(),
     impCClick:()=>$('imp-c').click(),
     rptFileClick:()=>$('rpt-file').click(),
-    clearAutofill,closeCAModal,closeEM,
+    clearAutofill,closeCAModal,closeEM,exportXLSX:(el)=>exportXLSX(el.dataset.type),toggleExportMenu,
     closeIFasgn:()=>closeIF('asgn'),closeIFatype:()=>closeIF('atype'),
     closeIFclient:()=>closeIF('client'),closeIFins:()=>closeIF('ins'),
-    closeIFpcat:()=>closeIF('pcat'),closeIFpgroup:()=>closeIF('pgroup'),
+    closePcatIF,closePgroupIF,
     closeSuitModal,deleteClaim,editClaim,exportCSV,genReport,
     importClaims:(el)=>importClaims(el),
+    loadAddressbookFile:(el)=>loadAddressbookFile(el),
     loadEPFile:(el)=>loadEPFile(el),
     loadSampleEP,
     navSearch:(el)=>nav('search',el),
@@ -910,15 +989,17 @@ function _initHandlers(){
     openCAForm,
     openIFasgn:()=>openIF('asgn'),openIFatype:()=>openIF('atype'),
     openIFclient:()=>openIF('client'),openIFins:()=>openIF('ins'),
-    openIFpcat:()=>openIF('pcat'),openIFpgroup:()=>openIF('pgroup'),
+    openPcatIF:(el)=>openPcatIF(el),openPgroupIF:(el)=>openPgroupIF(el),
+    openPcatAddModal:(el)=>openPcatAddModal(el),closePcatAddModal,savePcatAddItem,
     openSuitForm,renderCA,renderDash,renderList,renderSuit,resetForm,
     saveApiKey:(el)=>saveApiKey(el.value),
     saveAsgnItem,saveAtypeItem,saveCA,saveCfgMapping,saveClaim,
     saveClientItem,saveEPMapping,saveInsClientMapping,saveInsItem,
-    savePcatItem,savePgroupItem,saveSuit,
+    savePcatItem,savePgroupItem,saveSuit,renderProductTree,
     searchEP:(el)=>searchEP(el.value),
     setQuickAll:()=>setQuick('all'),setQuickMonth:()=>setQuick('month'),
     setQuickQuarter:()=>setQuick('quarter'),setQuickYear:()=>setQuick('year'),
+    showInsPolicy:(el)=>showInsPolicy(el),
     showInsTabFiles:(el)=>showInsTab('files',el),
     showInsTabMapping:(el)=>showInsTab('mapping',el),
     showInsTabUnmatched:(el)=>showInsTab('unmatched',el),
@@ -927,8 +1008,8 @@ function _initHandlers(){
     showSPclients:(el)=>showSP('clients',el),
     showSPinsurance:(el)=>showSP('insurance',el),
     showSPmapping:(el)=>showSP('mapping',el),
-    showSPpcats:(el)=>showSP('product-cats',el),
-    showSPpgroups:(el)=>showSP('product-groups',el),
+    showSPproducts:(el)=>showSP('products',el),
+    showSPaddressbook:(el)=>showSP('addressbook',el),
     updateIdPreview,
     uploadTemplate:(el)=>uploadTemplate(el),
     autoCreateClaims:(el)=>autoCreateClaims(JSON.parse(el.dataset.rows||'[]'),el.dataset.insid||''),
@@ -945,6 +1026,8 @@ function _initHandlers(){
     if(dtab&&dtab.dataset.dashTab){switchDashTab(dtab.dataset.dashTab);return;}
     const l=$('ac-list');
     if(l&&!l.contains(e.target)&&e.target.id!=='ep-s')l.style.display='none';
+    const em=$('export-menu');
+    if(em&&!$('export-wrap')?.contains(e.target))em.style.display='none';
     let el=e.target;
     while(el&&el!==document.body){
       if(el.dataset){
@@ -1010,6 +1093,13 @@ function _initHandlers(){
     if(e.target.dataset&&e.target.dataset.insUpload){uploadInsFile(e.target,e.target.dataset.insUpload);return;}
     // data-map-id (고객사-보험사 매핑 select)
     if(e.target.dataset&&e.target.dataset.mapId){clientMapping[e.target.dataset.mapId]=e.target.value;return;}
+    // 물류 선택 시 LM 정보 표시
+    if(e.target.id==='f-logistics'){
+      const lm=getLMInfo(e.target.value);
+      const box=$('lm-info-box');
+      if(box)box.innerHTML=lm?`<span style="font-size:11px;color:var(--tx2);">LM: <b>${lm.lmName||'-'}</b>${lm.lmEmail?' · '+lm.lmEmail:''} · 팀장: ${lm.teamLeader||'-'}</span>`:'';
+      return;
+    }
     let el=e.target;
     while(el&&el!==document.body){
       if(el.dataset&&el.dataset.fnc){const fn=FM[el.dataset.fnc];if(fn){fn(el);return;}}
@@ -1017,7 +1107,7 @@ function _initHandlers(){
     }
   });
   // 증권 모달 버튼
-  const bap=$('btn-add-policy');if(bap)bap.addEventListener('click',()=>openPolicyModal());
+  const bap=$('btn-add-ins-policy');if(bap)bap.addEventListener('click',()=>{const insId=bap.dataset.insId||'';openPolicyModal(null,insId);});
   const pmc=$('policy-modal-close');if(pmc)pmc.addEventListener('click',()=>$('policy-modal').classList.remove('open'));
   const pmca=$('policy-modal-cancel');if(pmca)pmca.addEventListener('click',()=>$('policy-modal').classList.remove('open'));
   const pms=$('policy-modal-save');if(pms)pms.addEventListener('click',savePolicyModal);
@@ -1424,11 +1514,6 @@ function prefillFromInsRow(r){
     }
     // 대구분 \u2192 대분류
     const grp=mapDaeguBun(r.대구분);
-    const pgEl=$('f-pgroup');
-    if(pgEl){
-      pgEl.innerHTML='<option value="">선택</option>'+productGroups.map(g=>`<option value="${g.id}">${g.name} (${g.code})</option>`).join('');
-      if(grp){pgEl.value=grp.id;onPgroupChange();}
-    }
     // 사고유형
     const t=(r.원인1||'')+(r.원인2||'');
     const atype=accidentTypes.find(x=>t.includes(x.name));
@@ -1439,8 +1524,9 @@ function prefillFromInsRow(r){
       const cEntry=Object.entries(clientMapping).find(([k,v])=>v===insId);
       if(cEntry&&$('f-cs')){$('f-cs').value=cEntry[0];onClientChange();}
     }
-    // 제품군
+    // 대분류·제품군 선택 (onClientChange 이후 실행)
     setTimeout(()=>{
+      if(grp){const pgEl=$('f-pgroup');if(pgEl){pgEl.value=grp.id;onPgroupChange();}}
       const pcat=mapJeumunGubun(r.제품구분);
       const pcEl=$('f-pcat');
       if(pcEl&&pcat){
@@ -1587,6 +1673,33 @@ function openDetail(id){
         :'<div style="font-size:13px;color:var(--tx3);padding:8px 0;">연결된 소송 없음</div>'}
       </div>`;
     })()}
+    ${(()=>{
+      if(!c.tname)return '';
+      const hist=claims.filter(x=>x.id!==c.id&&x.tname===c.tname).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+      if(!hist.length)return '';
+      return `<div class="card" style="margin-bottom:13px;">
+        <h3 style="margin:0 0 9px;"><svg class="ico ico-md" style="color:var(--orange);"><use href="#ico-truck"/></svg> 동일 기사 사고 이력</h3>
+        <div style="font-size:12px;color:var(--tx3);margin-bottom:7px;">기사명: <b>${c.tname}</b> · 총 ${hist.length}건</div>
+        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+          <thead><tr style="border-bottom:1px solid var(--bdr);">
+            <th style="padding:4px 6px;text-align:left;color:var(--tx3);font-weight:500;">접수번호</th>
+            <th style="padding:4px 6px;text-align:left;color:var(--tx3);font-weight:500;">사고유형</th>
+            <th style="padding:4px 6px;text-align:left;color:var(--tx3);font-weight:500;">상태</th>
+            <th style="padding:4px 6px;text-align:left;color:var(--tx3);font-weight:500;">접수일</th>
+            <th style="padding:4px 6px;text-align:left;color:var(--tx3);font-weight:500;">고객명</th>
+          </tr></thead>
+          <tbody>${hist.map(x=>`
+            <tr style="border-bottom:0.5px solid var(--bdr2);cursor:pointer;" data-goto-claim="${x.id}">
+              <td style="padding:5px 6px;font-family:var(--mono);color:var(--blue);">${x.id}</td>
+              <td style="padding:5px 6px;">${x.atype||'-'}</td>
+              <td style="padding:5px 6px;"><span class="st-${x.status||''}">${x.status||'-'}</span></td>
+              <td style="padding:5px 6px;">${x.date||'-'}</td>
+              <td style="padding:5px 6px;">${x.cname||'-'}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`;
+    })()}
     <div class="aib"><h3><svg class="ico ico-md" style="color:var(--blue);"><use href="#ico-robot"/></svg> AI 분석 · 초안 생성</h3>
       <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:9px;">
         <button class="btn sm" data-fn="runAIanalyze"><svg class="ico ico-md"><use href="#ico-search"/></svg> 클레임 분석</button>
@@ -1646,7 +1759,6 @@ function editClaim(){
     $('f-cs').value=c.clientId||'';onClientChange();
     const pg=$('f-pgroup');
     if(pg&&c.groupId){
-      pg.innerHTML='<option value="">선택</option>'+productGroups.map(g=>`<option value="${g.id}">${g.name} (${g.code})</option>`).join('');
       pg.value=c.groupId;onPgroupChange();
     }
     setTimeout(()=>{
@@ -1747,7 +1859,72 @@ function genReport(){
 /* ══════════════════════════════════════════════
    SETTINGS
 ══════════════════════════════════════════════ */
-function renderAllSettings(){renderClientsList();renderInsList();renderCfgMapping();renderAsgnList();renderPgroupList();renderAtypeList();renderPcatList();}
+function renderAllSettings(){renderClientsList();renderInsList();renderCfgMapping();renderAsgnList();renderAtypeList();if($('product-tree-list'))renderProductTree();renderAddressbook();}
+function renderAddressbook(){
+  const el=$('addressbook-table');if(!el)return;
+  if(!addressbook.length){el.innerHTML='<div style="font-size:13px;color:var(--tx3);padding:12px 0;">주소록을 업로드해주세요</div>';return;}
+  el.innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:12px;">
+    <thead><tr style="border-bottom:1px solid var(--bdr);">
+      <th style="padding:4px 6px;text-align:left;color:var(--tx3);font-weight:500;">팀</th>
+      <th style="padding:4px 6px;text-align:left;color:var(--tx3);font-weight:500;">물류센터</th>
+      <th style="padding:4px 6px;text-align:left;color:var(--tx3);font-weight:500;">업무구분</th>
+      <th style="padding:4px 6px;text-align:left;color:var(--tx3);font-weight:500;">BP사명</th>
+      <th style="padding:4px 6px;text-align:left;color:var(--tx3);font-weight:500;">LM</th>
+      <th style="padding:4px 6px;text-align:left;color:var(--tx3);font-weight:500;">LM 이메일</th>
+      <th style="padding:4px 6px;text-align:left;color:var(--tx3);font-weight:500;">팀장</th>
+    </tr></thead>
+    <tbody>${addressbook.map(r=>`
+      <tr style="border-bottom:0.5px solid var(--bdr2);">
+        <td style="padding:4px 6px;">${r.lineTeam||''}</td>
+        <td style="padding:4px 6px;">${r.logistics||''}</td>
+        <td style="padding:4px 6px;">${r.bizType||''}</td>
+        <td style="padding:4px 6px;">${r.bpName||''}</td>
+        <td style="padding:4px 6px;">${r.lmName||''}</td>
+        <td style="padding:4px 6px;">${r.lmEmail||''}</td>
+        <td style="padding:4px 6px;">${r.teamLeader||''}</td>
+      </tr>`).join('')}
+    </tbody>
+  </table>`;
+}
+function loadAddressbookFile(el){
+  const file=el.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const wb=XLSX.read(e.target.result,{type:'array'});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+      const parsed=[];let curTeam='',curLogistics='';
+      for(let i=5;i<rows.length;i++){
+        const r=rows[i];
+        if(!r.some(Boolean))continue;
+        if(r[0])curTeam=String(r[0]).trim();
+        if(r[1])curLogistics=String(r[1]).trim();
+        const lmRaw=String(r[8]||'').trim();
+        const lmName=lmRaw.split(/[\n\r]/)[0].trim();
+        const leaderRaw=String(r[10]||'').trim();
+        const teamLeader=leaderRaw.split(/[\n\r]/)[0].trim();
+        parsed.push({
+          lineTeam:curTeam,
+          logistics:curLogistics,
+          bizType:String(r[2]||'').trim(),
+          bpName:String(r[3]||'').trim(),
+          lmName,
+          lmEmail:String(r[9]||'').trim(),
+          teamLeader,
+        });
+      }
+      addressbook=parsed;persist();renderAddressbook();
+      alert('주소록 '+parsed.length+'건 저장 완료');
+    }catch(err){alert('파일 파싱 오류: '+err.message);}
+  };
+  reader.readAsArrayBuffer(file);
+  el.value='';
+}
+function getLMInfo(logisticsName){
+  if(!logisticsName)return null;
+  return addressbook.find(r=>r.logistics&&r.logistics.includes(logisticsName))||null;
+}
 
 /* 고객사 */
 function renderClientsList(){
@@ -1783,10 +1960,23 @@ function renderInsList(){
         <span class="ei-badge">${clients.filter(c=>clientMapping[c.id]===ins.id).length}개 고객사 담당</span>
       </div>
       <div style="display:flex;gap:4px;">
+        <button class="btn sm" data-fn="showInsPolicy" data-ins-id="${ins.id}">증권 관리</button>
         <button class="btn sm icon" data-em-type="ins" data-em-id="${ins.id}"><svg class="ico ico-md"><use href="#ico-pencil"/></svg></button>
         <button class="btn sm icon dng" data-del-type="ins" data-del-id="${ins.id}"><svg class="ico ico-md"><use href="#ico-trash"/></svg></button>
       </div>
     </div>`).join(''):'<div class="empty" style="padding:20px;">보험사가 없습니다</div>';
+}
+function showInsPolicy(el){
+  const insId=el.dataset.insId;
+  const ins=insCompanies.find(x=>x.id===insId);
+  const sec=$('ins-policy-section');
+  if(!sec)return;
+  const lbl=$('ins-policy-label');
+  if(lbl)lbl.textContent=ins?ins.name+' 증권 목록':'증권 목록';
+  const addBtn=$('btn-add-ins-policy');
+  if(addBtn)addBtn.dataset.insId=insId;
+  sec.style.display='';
+  renderPolicyList(insId);
 }
 function saveInsItem(){
   const name=($('ins-f-name')||{}).value||'';if(!name.trim()){alert('보험사명 입력');return;}
@@ -1857,68 +2047,150 @@ function saveAtypeItem(){
   persist();closeIF('atype');renderAtypeList();populateListFilters();
 }
 
-/* 대분류 */
-function renderPgroupList(){
-  const el=$('pgroup-list');if(!el)return;
-  el.innerHTML=productGroups.length?productGroups.map(g=>`
-    <div class="code-edit-row">
-      <span class="code-name">${g.name}</span>
-      <span class="code-badge">${g.code}</span>
-      <span style="font-size:11px;color:var(--tx2);flex:1;padding-left:8px;">${g.desc||''}</span>
-      <div style="display:flex;gap:4px;">
-        <button class="btn sm icon" data-em-type="pgroup" data-em-id="${g.id}"><svg class="ico ico-md"><use href="#ico-pencil"/></svg></button>
-        <button class="btn sm icon dng" data-del-type="pgroup" data-del-id="${g.id}"><svg class="ico ico-md"><use href="#ico-trash"/></svg></button>
-      </div>
-    </div>`).join(''):'<div class="empty" style="padding:20px;">대분류가 없습니다</div>';
-}
-function savePgroupItem(){
-  const name=($('pgroup-f-name')||{}).value||'',code=($('pgroup-f-code')||{}).value.toUpperCase()||'';
-  if(!name||!code){alert('대분류명과 코드를 입력하세요.');return;}
-  if(productGroups.find(x=>x.code===code)){alert('중복 코드');return;}
-  productGroups.push({id:uid('pg'),name,code,desc:($('pgroup-f-desc')||{}).value||''});
-  persist();closeIF('pgroup');renderPgroupList();
-  // 제품군 인라인폼의 대분류 드롭다운도 갱신
-  const sel=$('pcat-f-group');if(sel)sel.innerHTML='<option value="">선택</option>'+productGroups.map(g=>`<option value="${g.id}">${g.name} (${g.code})</option>`).join('');
+/* 제품 트리 (고객사 → 대분류 → 소분류) */
+function renderProductTree(){
+  const el=$('product-tree-list');if(!el)return;
+  const clientSel=$('ptree-client-filter');
+  if(clientSel){
+    const cur=clientSel.value;
+    clientSel.innerHTML='<option value="">전체 고객사</option>'+clients.map(c=>`<option value="${c.id}" ${c.id===cur?'selected':''}>${c.name}</option>`).join('');
+  }
+  const filterCid=clientSel?clientSel.value:'';
+
+  const visibleClients=filterCid
+    ?clients.filter(c=>c.id===filterCid)
+    :clients;
+
+  if(!visibleClients.length){el.innerHTML='<div class="empty" style="padding:20px;">고객사가 없습니다</div>';return;}
+
+  el.innerHTML=visibleClients.map(client=>{
+    const groups=productGroups.filter(g=>g.clientId===client.id);
+    const groupsHtml=groups.length?groups.map(g=>{
+      const cats=productCats.filter(p=>p.groupId===g.id);
+      const catsHtml=cats.length
+        ?cats.map(p=>`
+          <div class="code-edit-row" style="padding-left:28px;border-top:0.5px solid var(--bd3);">
+            <span style="font-size:10px;color:var(--tx3);margin-right:4px;">└</span>
+            <span class="code-name" style="font-size:12px;">${p.name}</span>
+            <span class="code-badge" style="font-size:10px;">${p.code}</span>
+            <div style="display:flex;gap:4px;margin-left:auto;">
+              <button class="btn sm icon" data-em-type="pcat" data-em-id="${p.id}"><svg class="ico ico-md"><use href="#ico-pencil"/></svg></button>
+              <button class="btn sm icon dng" data-del-type="pcat" data-del-id="${p.id}"><svg class="ico ico-md"><use href="#ico-trash"/></svg></button>
+            </div>
+          </div>`).join('')
+        :'<div style="padding:6px 28px;font-size:11px;color:var(--tx3);border-top:0.5px solid var(--bd3);">소분류 없음</div>';
+      return `
+        <div style="border-top:0.5px solid var(--bd2);">
+          <div class="code-edit-row" style="padding-left:12px;background:var(--bg1);">
+            <span class="code-name">${g.name}</span>
+            <span class="code-badge">${g.code}</span>
+            <span style="font-size:11px;color:var(--tx2);flex:1;padding-left:8px;">${g.desc||''}</span>
+            <div style="display:flex;gap:4px;">
+              <button class="btn sm" style="font-size:11px;padding:2px 7px;" data-fn="openPcatIF" data-group-id="${g.id}">+ 소분류</button>
+              <button class="btn sm icon" data-em-type="pgroup" data-em-id="${g.id}"><svg class="ico ico-md"><use href="#ico-pencil"/></svg></button>
+              <button class="btn sm icon dng" data-del-type="pgroup" data-del-id="${g.id}"><svg class="ico ico-md"><use href="#ico-trash"/></svg></button>
+            </div>
+          </div>
+          ${catsHtml}
+          <div style="padding:6px 12px;border-top:0.5px solid var(--bd3);">
+            <button class="btn sm" style="font-size:11px;padding:2px 9px;" data-fn="openPcatAddModal" data-group-id="${g.id}">+ 제품구분</button>
+          </div>
+        </div>`;
+    }).join('')
+    :'<div style="padding:10px 12px;font-size:12px;color:var(--tx3);">대분류 없음 — 위 [+ 대분류] 버튼으로 추가하세요</div>';
+
+    return `
+      <div style="background:var(--bg2);border-radius:var(--r-lg);overflow:hidden;margin-bottom:14px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--blue);border-radius:var(--r-lg) var(--r-lg) 0 0;">
+          <span style="font-size:13px;font-weight:600;color:#fff;">${client.name}</span>
+          <button class="btn sm" style="background:rgba(255,255,255,0.18);color:#fff;border:none;font-size:11px;"
+            data-fn="openPgroupIF" data-client-id="${client.id}">+ 대분류</button>
+        </div>
+        ${groupsHtml}
+      </div>`;
+  }).join('');
 }
 
-/* 제품군 */
-function renderPcatList(){
-  const el=$('pcat-list');if(!el)return;
-  el.innerHTML=productCats.map(p=>`
-    <div class="code-edit-row">
-      <span class="code-name">${p.name}</span>
-      <span class="code-badge">${p.code}</span>
-      <div style="display:flex;gap:4px;">
-        <button class="btn sm icon" data-em-type="pcat" data-em-id="${p.id}"><svg class="ico ico-md"><use href="#ico-pencil"/></svg></button>
-        <button class="btn sm icon dng" data-del-type="pcat" data-del-id="${p.id}"><svg class="ico ico-md"><use href="#ico-trash"/></svg></button>
-      </div>
-    </div>`).join('');
+function openPgroupIF(el){
+  const clientId=el?el.dataset.clientId:'';
+  const f=$('pgroup-if');if(!f)return;
+  f.style.display='block';
+  const sel=$('pgroup-f-client');if(sel)sel.value=clientId||'';
+  $('pgroup-f-name').value='';$('pgroup-f-code').value='';$('pgroup-f-desc').value='';
+  f.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
+function closePgroupIF(){const f=$('pgroup-if');if(f)f.style.display='none';}
+
+function savePgroupItem(){
+  const name=($('pgroup-f-name')||{}).value.trim()||'';
+  const code=($('pgroup-f-code')||{}).value.trim().toUpperCase()||'';
+  const clientId=($('pgroup-f-client')||{}).value||'';
+  if(!name||!code){alert('대분류명과 코드를 입력하세요.');return;}
+  if(!clientId){alert('고객사를 선택하세요.');return;}
+  if(productGroups.find(x=>x.code===code&&x.clientId===clientId)){alert('해당 고객사에 이미 동일한 코드가 있습니다.');return;}
+  productGroups.push({id:uid('pg'),name,code,desc:($('pgroup-f-desc')||{}).value.trim()||'',clientId});
+  persist();closePgroupIF();renderProductTree();
+}
+
+function openPcatIF(el){
+  const groupId=el?el.dataset.groupId:'';
+  const gid=$('pcat-f-group-id');if(gid)gid.value=groupId;
+  const f=$('pcat-if');if(!f)return;
+  f.style.display='block';
+  const g=productGroups.find(x=>x.id===groupId);
+  const lbl=$('pcat-if-group-label');if(lbl)lbl.textContent=g?`${g.name} (${g.code})`:'선택된 대분류 없음';
+  $('pcat-f-name').value='';$('pcat-f-code').value='';
+  f.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+function closePcatIF(){const f=$('pcat-if');if(f)f.style.display='none';}
+
+function openPcatAddModal(el){
+  const groupId=el?el.dataset.groupId:'';
+  const g=productGroups.find(x=>x.id===groupId);
+  const lbl=$('pcat-add-group-label');if(lbl)lbl.textContent=g?`${g.name} (${g.code})`:'선택된 대분류 없음';
+  const gid=$('pcat-add-group-id');if(gid)gid.value=groupId;
+  $('pcat-add-code').value='';$('pcat-add-name').value='';
+  $('pcat-add-modal').classList.add('open');
+}
+function closePcatAddModal(){$('pcat-add-modal').classList.remove('open');}
+function savePcatAddItem(){
+  const code=($('pcat-add-code')||{}).value.trim().toUpperCase()||'';
+  const name=($('pcat-add-name')||{}).value.trim()||'';
+  if(!code||!name){alert('제품코드와 제품명을 입력하세요.');return;}
+  if(productCats.find(x=>x.code===code)){alert('이미 존재하는 제품코드입니다.');return;}
+  const groupId=($('pcat-add-group-id')||{}).value||'';
+  const pg=productGroups.find(g=>g.id===groupId);
+  productCats.push({id:uid('pc'),groupId,code,name,clientId:pg?pg.clientId:''});
+  persist();closePcatAddModal();renderProductTree();
+}
+
 function savePcatItem(){
-  const name=($('pcat-f-name')||{}).value||'',code=($('pcat-f-code')||{}).value.toUpperCase()||'';
+  const name=($('pcat-f-name')||{}).value.trim()||'';
+  const code=($('pcat-f-code')||{}).value.trim().toUpperCase()||'';
   if(!name||!code){alert('제품군명과 코드 입력');return;}
   if(productCats.find(x=>x.code===code)){alert('중복 코드');return;}
-  const pgId=($('pcat-f-group')||{}).value||'';
-  productCats.push({id:uid('pc'),name,code,groupId:pgId});
-  persist();closeIF('pcat');renderPcatList();
+  const pgId=($('pcat-f-group-id')||{}).value||'';
+  const pg=productGroups.find(g=>g.id===pgId);
+  productCats.push({id:uid('pc'),name,code,groupId:pgId,clientId:pg?pg.clientId:''});
+  persist();closePcatIF();renderProductTree();
 }
 
 /* 삭제 */
 function delItem(type,id){
-  const lbl={client:'고객사',ins:'보험사',asgn:'담당자',atype:'사고유형',pcat:'제품군'};
+  const lbl={client:'고객사',ins:'보험사',asgn:'담당자',atype:'사고유형',pcat:'제품군',pgroup:'대분류'};
   if(type==='client'){clients=clients.filter(x=>x.id!==id);delete clientMapping[id];}
   else if(type==='ins'){insCompanies=insCompanies.filter(x=>x.id!==id);Object.keys(clientMapping).forEach(k=>{if(clientMapping[k]===id)delete clientMapping[k];});}
   else if(type==='asgn')assignees=assignees.filter(x=>x.id!==id);
   else if(type==='atype')accidentTypes=accidentTypes.filter(x=>x.id!==id);
   else if(type==='pcat')productCats=productCats.filter(x=>x.id!==id);
+  else if(type==='pgroup'){productGroups=productGroups.filter(x=>x.id!==id);productCats=productCats.filter(x=>x.groupId!==id);}
   persist();renderAllSettings();populateListFilters();
 }
 
 /* ── 인라인 폼 ── */
 function openIF(type){
-  ['client','ins','asgn','atype','pcat','pgroup'].forEach(t=>{const e=$(t+'-if');if(e)e.style.display='none';});
+  ['client','ins','asgn','atype'].forEach(t=>{const e=$(t+'-if');if(e)e.style.display='none';});
   const el=$(type+'-if');if(el)el.style.display='block';
-  if(type==='pcat'){const sel=$('pcat-f-group');if(sel)sel.innerHTML='<option value="">선택</option>'+productGroups.map(g=>`<option value="${g.id}">${g.name} (${g.code})</option>`).join('');}
   if(type==='ins'){
     selInsColor=COLORS[0];
     const picker=$('ins-color-picker');
@@ -1929,7 +2201,6 @@ function closeIF(type){
   const el=$(type+'-if');if(el)el.style.display='none';
   ['f-name','f-memo','f-rank','f-area','f-code','f-desc'].forEach(f=>{const inp=$(type+'-'+f);if(inp)inp.value='';});
 }
-
 /* ── 수정 모달 ── */
 function openEM(type,id){
   const title=$('em-title'),body=$('em-body'),saveBtn=$('em-save');
@@ -1957,14 +2228,26 @@ function openEM(type,id){
   }else if(type==='pgroup'){
     const item=productGroups.find(x=>x.id===id);if(!item)return;
     title.textContent='대분류 수정';
-    body.innerHTML=inp('대분류명',item.name)+inp('코드',item.code,'','maxlength="5" style="text-transform:uppercase;"')+inp('설명',item.desc||'');
-    saveBtn.onclick=()=>{const n=($('em-대분류명')||{}).value||'',code=($('em-코드')||{}).value.toUpperCase()||'';if(!n||!code){alert('필수');return;}item.name=n.trim();item.code=code;item.desc=($('em-설명')||{}).value||'';persist();closeEM();renderPgroupList();};
+    const clientOpts=clients.map(c=>`<option value="${c.id}" ${item.clientId===c.id?'selected':''}>${c.name}</option>`).join('');
+    body.innerHTML=`<div class="fi"><label>고객사</label><select id="em-pg-client" style="padding:6px 9px;border:0.5px solid var(--bd2);border-radius:var(--r-md);background:var(--bg1);color:var(--tx1);font-size:13px;font-family:var(--font);width:100%;"><option value="">선택</option>${clientOpts}</select></div>`
+      +inp('대분류명',item.name)+inp('코드',item.code,'','maxlength="5" style="text-transform:uppercase;"')+inp('설명',item.desc||'');
+    saveBtn.onclick=()=>{
+      const n=($('em-대분류명')||{}).value.trim()||'',code=($('em-코드')||{}).value.toUpperCase()||'';
+      const cid=($('em-pg-client')||{}).value||'';
+      if(!n||!code){alert('필수');return;}
+      item.name=n;item.code=code;item.desc=($('em-설명')||{}).value.trim()||'';item.clientId=cid;
+      persist();closeEM();renderProductTree();
+    };
   }else if(type==='pcat'){
     const item=productCats.find(x=>x.id===id);if(!item)return;
     title.textContent='제품군 수정';
-    const pgOpts=productGroups.map(g=>`<option value="${g.id}" ${item.groupId===g.id?'selected':''}>${g.name} (${g.code})</option>`).join('');
+    const parentGroup=productGroups.find(x=>x.id===item.groupId);
+    const parentClient=parentGroup?clients.find(c=>c.id===parentGroup.clientId):null;
+    const pgOpts=productGroups
+      .filter(g=>!parentClient||g.clientId===parentClient.id)
+      .map(g=>`<option value="${g.id}" ${item.groupId===g.id?'selected':''}>${g.name} (${g.code})</option>`).join('');
     body.innerHTML=inp('제품군명',item.name)+inp('코드',item.code,'','maxlength="4" style="text-transform:uppercase;"')+`<div class="fi"><label>대분류</label><select id="em-pgroup" style="padding:6px 9px;border:0.5px solid var(--bd2);border-radius:var(--r-md);background:var(--bg1);color:var(--tx1);font-size:13px;font-family:var(--font);width:100%;"><option value="">선택</option>${pgOpts}</select></div>`;
-    saveBtn.onclick=()=>{const n=($('em-제품군명')||{}).value||'',code=($('em-코드')||{}).value.toUpperCase()||'';if(!n||!code){alert('필수');return;}item.name=n.trim();item.code=code;item.groupId=$('em-pgroup').value||'';persist();closeEM();renderPcatList();};;
+    saveBtn.onclick=()=>{const n=($('em-제품군명')||{}).value||'',code=($('em-코드')||{}).value.toUpperCase()||'';if(!n||!code){alert('필수');return;}item.name=n.trim();item.code=code;item.groupId=$('em-pgroup').value||'';persist();closeEM();renderProductTree();};;
   }
   $('edit-modal').classList.add('open');
 }
@@ -1974,12 +2257,32 @@ function closeEM(){$('edit-modal').classList.remove('open');}
 /* ══════════════════════════════════════════════
    EXPORT / IMPORT
 ══════════════════════════════════════════════ */
-function exportCSV(){
-  const hdr=['접수번호','대분류','제품군','고객사','담당보험사','고객명','연락처','주소','제품모델','통문일자','설치기사','기사ID','사고유형','귀책여부','평가반영','상태','담당자','손해액','보험접수일','클레임입력일','내용','비고'];
-  const rows=claims.map(c=>[c.id,c.groupName||'',c.pcatName||'',c.client||'',c.insCoId?getInsName(c.insCoId):(c.clientId?getInsForClient(c.clientId)?.name||'':''),c.name,c.phone||'',c.addr||'',c.product||'',c.idate||'',c.tname||'',c.tid||'',c.type,c.liability||'',c.evalReflect||'',c.status,c.assignee,c.amount||0,c.insDate||'',c.date,c.desc,c.note||'']);
-  const csv='\uFEFF'+[hdr,...rows].map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
-  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
-  const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='클레임_'+new Date().toISOString().slice(0,10)+'.csv';a.click();URL.revokeObjectURL(url);
+function exportCSV(){exportXLSX('claims');}
+function toggleExportMenu(){
+  const m=$('export-menu');if(!m)return;
+  m.style.display=m.style.display==='none'?'block':'none';
+}
+function exportXLSX(type){
+  const m=$('export-menu');if(m)m.style.display='none';
+  let data,filename;
+  if(type==='claims'){
+    filename='보험클레임_';
+    data=claims.map(c=>({'접수번호':c.id,'고객명':c.name,'주소':c.addr||'','고객사':c.client||'','물류':c.logistics||'','사고유형':c.type||'','제품군':c.pcatName||'','상태':c.status||'','보험접수번호':c.insNo||'','보험사':c.insCoId?getInsName(c.insCoId):'','접수일':c.insDate||c.date||'','추산보험금':c.amount||0,'조사비OS':c.surveyOS||0,'지급보험금':c.finalPayment||0,'조사비':c.survey||0,'귀책여부':c.liability||''}));
+  }else if(type==='minor'){
+    filename='소액클레임_';
+    data=minorClaims.map(c=>({'접수번호':c.id||'','고객명':c.name||'','주소':c.addr||'','물류':c.logistics||'','사고유형':c.type||'','상태':c.status||'','접수일':c.date||'','청구금액':c.claimAmt||0,'지급금액':c.paidAmt||0,'비고':c.note||''}));
+  }else if(type==='consumer'){
+    filename='소비자원_';
+    data=consumerCases.map(c=>({'접수번호':c.id||'','신청인':c.name||'','물류':c.logistics||'','유형':c.type||'','상태':c.status||'','접수일':c.date||'','청구금액':c.claimAmt||0,'결정금액':c.decisionAmt||0,'비고':c.note||''}));
+  }else if(type==='suit'){
+    filename='소송_';
+    data=lawsuits.map(s=>({'사건번호':s.no||'','원고':s.plaintiff||'','피고1':s.defendant||'','피고2':s.defendant2||'','관할법원':s.court||'','보험사':s.insCoId?getInsName(s.insCoId):'','법무법인':s.lawfirm||'','상태':s.status||'','결과':s.result||'','소가':s.amount||0,'접수일':s.date||'','다음기일':s.nextDate||''}));
+  }
+  if(!data||!data.length){alert('내보낼 데이터가 없습니다.');return;}
+  const ws=XLSX.utils.json_to_sheet(data);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'데이터');
+  XLSX.writeFile(wb,filename+new Date().toISOString().slice(0,10)+'.xlsx');
 }
 function importClaims(input){const f=input.files[0];if(!f)return;const r=new FileReader();r.onload=e=>{try{const d=JSON.parse(e.target.result);if(Array.isArray(d)){claims=d;persist();renderDash();}else console.error('형식 오류');}catch(err){console.error('파싱 오류');}};r.readAsText(f);input.value='';}
 
@@ -2501,10 +2804,11 @@ function renderLinkedCard({claimId, minorId, caId, suitId, selfClaimId}={}){
    증권 관리 (보험사별)
 ══════════════════════════════════════════════ */
 let curPolicyId=null;
-function renderPolicyList(){
+function renderPolicyList(filterInsId){
   const el=$('policy-list');if(!el)return;
-  if(!policySettings.length){el.innerHTML='<div style="font-size:13px;color:var(--tx3);padding:8px 0;">등록된 증권 없음</div>';return;}
-  el.innerHTML=policySettings.map(p=>{
+  const list=filterInsId?policySettings.filter(p=>p.insId===filterInsId):policySettings;
+  if(!list.length){el.innerHTML='<div style="font-size:13px;color:var(--tx3);padding:8px 0;">등록된 증권 없음</div>';return;}
+  el.innerHTML=list.map(p=>{
     const ins=insCompanies.find(x=>x.id===p.insId);
     const typeLabel=p.type==='HA'?'가정설치':'에어컨+정수기/빌트인';
     // 현재 유효한 증권인지
@@ -2534,12 +2838,13 @@ function renderPolicyList(){
     });
   });
 }
-function openPolicyModal(id){
+function openPolicyModal(id,defaultInsId){
   curPolicyId=id||null;
   const p=(id?policySettings.find(x=>x.id===id):null)||{};
+  const preInsId=p.insId||defaultInsId||'';
   $('policy-modal-title').textContent=id?'증권 수정':'증권 등록';
   const ins=$('pm-f-ins');
-  if(ins)ins.innerHTML='<option value="">선택</option>'+(insCompanies||[]).map(x=>'<option value="'+x.id+'" '+(p.insId===x.id?'selected':'')+'>'+x.name+'</option>').join('');
+  if(ins)ins.innerHTML='<option value="">선택</option>'+(insCompanies||[]).map(x=>'<option value="'+x.id+'" '+(preInsId===x.id?'selected':'')+'>'+x.name+'</option>').join('');
   const fno=$('pm-f-no');if(fno)fno.value=p.no||'';
   const ftype=$('pm-f-type');if(ftype)ftype.value=p.type||'HA';
   const flimit=$('pm-f-limit');if(flimit)flimit.value=p.limit||'';
@@ -2560,7 +2865,9 @@ function savePolicyModal(){
   if(curPolicyId){const i=policySettings.findIndex(x=>x.id===curPolicyId);if(i>=0)policySettings[i]=d;}
   else policySettings.unshift(d);
   persist();$('policy-modal').classList.remove('open');
-  renderPolicyList();renderPolicyStats();
+  const sec=$('ins-policy-section');
+  const curInsId=($('btn-add-ins-policy')||{}).dataset&&$('btn-add-ins-policy').dataset.insId;
+  renderPolicyList(sec&&sec.style.display!=='none'?curInsId:undefined);renderPolicyStats();
 }
 function renderPolicyStats(){
   const el=$('policy-stat-grid');if(!el)return;
@@ -2613,37 +2920,19 @@ function resizeToBase64(file,maxW=800,maxH=600,quality=0.75){
 }
 
 async function uploadPhoto(claimId, slot, file){
-  if(!storage)return null;
-  const ext=file.name.split('.').pop();
-  const ref=storage.ref(`claims/${claimId}/${slot}.${ext}`);
-  await ref.put(file);
-  const url=await ref.getDownloadURL();
-  // 보고서용 base64를 Firestore에 저장 (CORS 우회)
+  const url = await DB.uploadFile(claimId, slot, file);
+  if(!url) return null;
   try{
-    const b64full=await resizeToBase64(file);
-    if(b64full&&db){
-      const docId=`photos_${claimId}`;
-      const snap=await db.collection('lx-claim').doc(docId).get();
-      const existing=snap.exists?snap.data().value:{};
-      existing[slot]={data:b64full.split(',')[1],extension:'jpeg'};
-      await db.collection('lx-claim').doc(docId).set({value:existing});
-    }
-  }catch(e){console.warn('사진 Firestore 저장 실패:',e);}
+    const b64full = await resizeToBase64(file);
+    if(b64full)
+      await DB.setPhotoData(claimId, slot, {data: b64full.split(',')[1], extension: 'jpeg'});
+  }catch(e){ console.warn('사진 저장 실패:', e); }
   return url;
 }
 
 async function getClaimPhotos(claimId){
-  if(!storage)return {};
-  const slots=['설치사진1','설치사진2','설치사진3','설치사진4','피해사진1','피해사진2','피해사진3','피해사진4','재방문사진1','재방문사진2'];
-  const result={};
-  await Promise.all(slots.map(async slot=>{
-    try{
-      const items=(await storage.ref(`claims/${claimId}`).listAll()).items;
-      const match=items.find(i=>i.name.startsWith(slot));
-      if(match)result[slot]=await match.getDownloadURL();
-    }catch(e){}
-  }));
-  return result;
+  const files = await DB.listFiles(claimId);
+  return Object.fromEntries(files.map(f => [f.slot, f.url]));
 }
 
 function renderPhotoUploadUI(claimId){
@@ -2674,12 +2963,9 @@ function renderPhotoUploadUI(claimId){
 }
 
 async function loadClaimPhotos(claimId){
-  if(!storage)return;
   try{
-    const listResult=await storage.ref(`claims/${claimId}`).listAll();
-    await Promise.all(listResult.items.map(async item=>{
-      const slot=item.name.replace(/\.[^.]+$/,'');
-      const url=await item.getDownloadURL();
+    const files = await DB.listFiles(claimId);
+    files.forEach(({slot, url})=>{
       const div=document.getElementById(`photo-${slot}`);
       if(div){
         div.innerHTML=`<img src="${url}" style="width:100%;height:100%;object-fit:cover;">`;
@@ -2690,7 +2976,7 @@ async function loadClaimPhotos(claimId){
       if(lbl)lbl.style.display='none';
       const delBtn=document.getElementById(`photo-del-${slot}`);
       if(delBtn)delBtn.style.display='inline-flex';
-    }));
+    });
     // 삭제 버튼 이벤트 바인딩
     document.querySelectorAll(`[data-photo-del]`).forEach(btn=>{
       if(btn.dataset.claim!==claimId)return;
@@ -2699,15 +2985,8 @@ async function loadClaimPhotos(claimId){
         const slot=btn.dataset.photoDel;
         if(!confirm(`${slot} 사진을 삭제할까요?`))return;
         try{
-          const items=(await storage.ref(`claims/${claimId}`).listAll()).items;
-          const match=items.find(i=>i.name.startsWith(slot));
-          if(match)await match.delete();
-          // Firestore base64도 삭제
-          if(db){
-            const docId=`photos_${claimId}`;
-            const snap=await db.collection('lx-claim').doc(docId).get();
-            if(snap.exists){const d=snap.data().value||{};delete d[slot];await db.collection('lx-claim').doc(docId).set({value:d});}
-          }
+          await DB.deleteFile(claimId, slot);
+          await DB.setPhotoData(claimId, slot, null);
           const div=document.getElementById(`photo-${slot}`);
           if(div){
             div.innerHTML=`<span style="font-size:11px;color:var(--tx3);">${slot}</span>`;
@@ -2902,14 +3181,7 @@ async function downloadReport(claimId){
     const bytes=new Uint8Array(binary.length);
     for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
 
-    // Firestore에서 사진 base64 로드 (CORS 우회)
-    let photos={};
-    if(db){
-      try{
-        const snap=await db.collection('lx-claim').doc(`photos_${claimId}`).get();
-        if(snap.exists)photos=snap.data().value||{};
-      }catch(e){console.warn('사진 로드 실패:',e);}
-    }
+    const photos = await DB.getPhotoData(claimId);
 
     // 이미지 플레이스홀더 데이터 추가 (없는 슬롯은 null)
     const slots=['설치사진1','설치사진2','설치사진3','설치사진4','피해사진1','피해사진2','피해사진3','피해사진4','재방문사진1','재방문사진2','교육사진1','교육사진2'];
@@ -3949,7 +4221,7 @@ function openLinkSuitModal(claimId){
    INIT
 ══════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', async function(){
-  initFirebase();
+  DB.init();
   // 로딩 표시
   document.body.innerHTML += '<div id="loading-overlay" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(255,255,255,0.9);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;font-family:sans-serif;"><div style="font-size:18px;font-weight:500;color:#185FA5;margin-bottom:12px;">데이터 불러오는 중...</div><div style="font-size:13px;color:#888;">Firebase 연결 중</div></div>';
 

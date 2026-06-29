@@ -345,7 +345,15 @@ body{font-family:var(--font);font-size:14px;color:var(--tx1);background:var(--bg
   <svg class="ico ico-md" style="font-size:18px;color:var(--blue);"><use href="#ico-clipboard-list"/></svg>
   <h1>LX판토스 클레임 관리</h1>
   <div class="topbar-actions">
-    <button class="btn sm" data-fn="exportCSV"><svg class="ico ico-md"><use href="#ico-download"/></svg> Excel</button>
+    <div style="position:relative;" id="export-wrap">
+      <button class="btn sm" data-fn="toggleExportMenu"><svg class="ico ico-md"><use href="#ico-download"/></svg> Excel ▾</button>
+      <div id="export-menu" style="display:none;position:absolute;top:calc(100% + 4px);right:0;background:var(--bg1);border:0.5px solid var(--bd2);border-radius:var(--r-md);min-width:120px;box-shadow:0 4px 16px rgba(0,0,0,0.12);z-index:300;overflow:hidden;">
+        <button class="btn sm" style="display:block;width:100%;text-align:left;border-radius:0;padding:8px 14px;font-size:12px;" data-fn="exportXLSX" data-type="claims">보험클레임</button>
+        <button class="btn sm" style="display:block;width:100%;text-align:left;border-radius:0;padding:8px 14px;font-size:12px;" data-fn="exportXLSX" data-type="minor">소액클레임</button>
+        <button class="btn sm" style="display:block;width:100%;text-align:left;border-radius:0;padding:8px 14px;font-size:12px;" data-fn="exportXLSX" data-type="consumer">소비자원</button>
+        <button class="btn sm" style="display:block;width:100%;text-align:left;border-radius:0;padding:8px 14px;font-size:12px;" data-fn="exportXLSX" data-type="suit">소송</button>
+      </div>
+    </div>
     <button class="btn sm" data-fn="impCClick"><svg class="ico ico-md"><use href="#ico-upload"/></svg> 불러오기</button>
     <input type="file" id="imp-c" accept=".json" style="display:none" data-fnc="importClaims">
   </div>
@@ -362,14 +370,12 @@ body{font-family:var(--font);font-size:14px;color:var(--tx1);background:var(--bg
 <!-- NAV -->
 <div class="nav">
   <button class="nb active" data-fn="navDashboard"><svg class="ico ico-md"><use href="#ico-dashboard"/></svg> 대시보드</button>
-  <button class="nb" data-fn="navList"><svg class="ico ico-md"><use href="#ico-list"/></svg> 클레임 목록</button>
+  <button class="nb" data-fn="navList"><svg class="ico ico-md"><use href="#ico-list"/></svg> 통합조회</button>
   <button class="nb" data-fn="navRegister"><svg class="ico ico-md"><use href="#ico-plus"/></svg> 신규 접수</button>
-  <button class="nb" data-fn="navEplink"><svg class="ico ico-md"><use href="#ico-database-import"/></svg> EP 연동</button>
   <button class="nb" data-fn="navInsurance"><svg class="ico ico-md"><use href="#ico-building-bank"/></svg> 보험사 <span id="ins-badge" style="display:none;background:var(--red);color:#fff;border-radius:9px;padding:1px 6px;font-size:11px;margin-left:2px;"></span></button>
   <button class="nb" data-fn="navMinor"><svg class="ico ico-md"><use href="#ico-coin"/></svg> 소액클레임</button>
   <button class="nb" data-fn="navConsumer"><svg class="ico ico-md"><use href="#ico-users"/></svg> 소비자원</button>
   <button class="nb" data-fn="navLawsuit"><svg class="ico ico-md"><use href="#ico-scale"/></svg> 소송</button>
-  <button class="nb" data-fn="navSearch"><svg class="ico ico-md"><use href="#ico-search"/></svg> 통합조회</button>
   <button class="nb" data-fn="navSettings"><svg class="ico ico-md"><use href="#ico-settings"/></svg> 설정·관리</button>
 </div>
 
@@ -503,7 +509,7 @@ body{font-family:var(--font);font-size:14px;color:var(--tx1);background:var(--bg
     <h3 style="margin-bottom:12px;">1. 기본사항</h3>
     <div class="fg">
       <div class="fi"><label>소속(팀)</label><select id="f-lineteam"><option value="">선택</option><option>수도권서부팀</option><option>수도권동부팀</option><option>지방권서부팀</option><option>지방권중부팀</option><option>지방권동부팀</option></select></div>
-      <div class="fi"><label>물류(협력업체)</label><input type="text" id="f-logistics" placeholder="물류센터명"></div>
+      <div class="fi"><label>물류(협력업체)</label><input type="text" id="f-logistics" placeholder="물류센터명"><div id="lm-info-box" style="margin-top:4px;"></div></div>
       <div class="fi"><label>설치기사 / 차량번호</label><input type="text" id="f-tname" placeholder="기사명 / 차량번호"></div>
       <div class="fi"><label>설치기사 ID</label><input type="text" id="f-tid" placeholder="기사ID"></div>
       <div class="fi"><label>설치경력 / 계약일자</label><input type="text" id="f-career" placeholder="예: 3년 / 2023-01-01"></div>
@@ -796,14 +802,6 @@ body{font-family:var(--font);font-size:14px;color:var(--tx1);background:var(--bg
 <!-- ════════════════════ 설정·관리 ════════════════════ -->
 <div class="sec" id="s-settings">
   <div style="font-size:15px;font-weight:500;margin-bottom:14px;">설정 · 관리</div>
-  <!-- 증권 관리 -->
-  <div style="background:var(--bg2);border:0.5px solid var(--bd2);border-radius:var(--r-lg);padding:12px 16px;margin-bottom:14px;">
-    <div style="display:flex;align-items:center;margin-bottom:10px;">
-      <div style="flex:1;font-size:13px;font-weight:500;">보험사별 증권 관리</div>
-      <button class="btn pri sm" id="btn-add-policy">+ 증권 추가</button>
-    </div>
-    <div id="policy-list"></div>
-  </div>
   <!-- 증권 등록 모달 -->
   <!-- 데이터 관리 -->
   <div style="background:#FCEBEB;border:0.5px solid #F7C1C1;border-radius:var(--r-lg);padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px;">
@@ -827,7 +825,8 @@ body{font-family:var(--font);font-size:14px;color:var(--tx1);background:var(--bg
       <button class="snb" data-fn="showSPmapping"><svg class="ico ico-md"><use href="#ico-link"/></svg> 고객사-보험사</button>
       <button class="snb" data-fn="showSPassignees"><svg class="ico ico-md"><use href="#ico-users"/></svg> 담당자</button>
       <button class="snb" data-fn="showSPatype"><svg class="ico ico-md"><use href="#ico-flame"/></svg> 사고유형</button>
-      <button class="snb" data-fn="showSPpcats"><svg class="ico ico-md"><use href="#ico-box"/></svg> 제품군</button>
+      <button class="snb" data-fn="showSPproducts"><svg class="ico ico-md"><use href="#ico-box"/></svg> 제품군</button>
+      <button class="snb" data-fn="showSPaddressbook"><svg class="ico ico-md"><use href="#ico-users"/></svg> 주소록</button>
     </div>
     <div class="settings-panel">
       <!-- 고객사 -->
@@ -851,6 +850,13 @@ body{font-family:var(--font);font-size:14px;color:var(--tx1);background:var(--bg
           <div class="inline-form-actions"><button class="btn sm" data-fn="closeIFins">취소</button><button class="btn sm pri" data-fn="saveInsItem">저장</button></div>
         </div>
         <div class="edit-list" id="ins-list"></div>
+        <div id="ins-policy-section" style="display:none;margin-top:16px;border-top:1px solid var(--bdr);padding-top:14px;">
+          <div style="display:flex;align-items:center;margin-bottom:9px;">
+            <div style="flex:1;font-size:13px;font-weight:500;" id="ins-policy-label">증권 목록</div>
+            <button class="btn pri sm" id="btn-add-ins-policy">+ 증권 추가</button>
+          </div>
+          <div id="policy-list"></div>
+        </div>
       </div>
       <!-- 매핑 -->
       <div class="sp" id="sp-mapping">
@@ -870,19 +876,6 @@ body{font-family:var(--font);font-size:14px;color:var(--tx1);background:var(--bg
         </div>
         <div class="edit-list" id="asgn-list"></div>
       </div>
-      <!-- 대분류 -->
-      <div class="sp" id="sp-product-groups">
-        <div class="sh"><div><h2>대분류 코드</h2><p style="font-size:12px;color:var(--tx2);margin-top:3px;">접수번호 구조: 연도-대분류-제품-유형-순번</p></div><button class="btn pri sm" data-fn="openIFpgroup"><svg class="ico ico-md"><use href="#ico-plus"/></svg> 추가</button></div>
-        <div id="pgroup-if" style="display:none;" class="inline-form">
-          <div class="fg">
-            <div class="fi"><label>대분류명 *</label><input type="text" id="pgroup-f-name" placeholder="예: 시스템에어컨"></div>
-            <div class="fi"><label>코드 (영문 1-5자) *</label><input type="text" id="pgroup-f-code" placeholder="예: SYS" maxlength="5" style="text-transform:uppercase;"></div>
-            <div class="fi full"><label>설명</label><input type="text" id="pgroup-f-desc" placeholder="예: System Air Conditioner"></div>
-          </div>
-          <div class="inline-form-actions"><button class="btn sm" data-fn="closeIFpgroup">취소</button><button class="btn sm pri" data-fn="savePgroupItem">저장</button></div>
-        </div>
-        <div style="background:var(--bg2);border-radius:var(--r-lg);overflow:hidden;" id="pgroup-list"></div>
-      </div>
       <!-- 사고유형 -->
       <div class="sp" id="sp-accident-types">
         <div class="sh"><div><h2>사고유형 코드</h2></div><button class="btn pri sm" data-fn="openIFatype"><svg class="ico ico-md"><use href="#ico-plus"/></svg> 추가</button></div>
@@ -895,18 +888,52 @@ body{font-family:var(--font);font-size:14px;color:var(--tx1);background:var(--bg
         </div>
         <div style="background:var(--bg2);border-radius:var(--r-lg);overflow:hidden;" id="atype-list"></div>
       </div>
-      <!-- 제품군 -->
-      <div class="sp" id="sp-product-cats">
-        <div class="sh"><div><h2>제품군 코드</h2></div><button class="btn pri sm" data-fn="openIFpcat"><svg class="ico ico-md"><use href="#ico-plus"/></svg> 추가</button></div>
-        <div id="pcat-if" style="display:none;" class="inline-form">
+      <!-- 제품군 트리 (고객사 → 대분류 → 소분류) -->
+      <div class="sp" id="sp-products">
+        <div class="sh">
+          <div>
+            <h2>제품군 관리</h2>
+            <p style="font-size:12px;color:var(--tx2);margin-top:3px;">접수번호 구조: 연도-대분류-제품-유형-순번</p>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <select id="ptree-client-filter" data-fnc="renderProductTree" style="padding:5px 9px;border:0.5px solid var(--bd2);border-radius:var(--r-md);background:var(--bg1);color:var(--tx1);font-size:12px;font-family:var(--font);">
+              <option value="">전체 고객사</option>
+            </select>
+          </div>
+        </div>
+        <!-- 대분류 추가 인라인 폼 -->
+        <div id="pgroup-if" style="display:none;" class="inline-form">
+          <div style="font-size:12px;font-weight:500;color:var(--tx2);margin-bottom:8px;">대분류 추가</div>
+          <input type="hidden" id="pgroup-f-client">
+          <div class="fg">
+            <div class="fi"><label>대분류명 *</label><input type="text" id="pgroup-f-name" placeholder="예: 시스템에어컨"></div>
+            <div class="fi"><label>코드 (영문 1-5자) *</label><input type="text" id="pgroup-f-code" placeholder="예: SYS" maxlength="5" style="text-transform:uppercase;"></div>
+            <div class="fi full"><label>설명</label><input type="text" id="pgroup-f-desc" placeholder="예: System Air Conditioner"></div>
+          </div>
+          <div class="inline-form-actions"><button class="btn sm" data-fn="closePgroupIF">취소</button><button class="btn sm pri" data-fn="savePgroupItem">저장</button></div>
+        </div>
+        <!-- 소분류 추가 인라인 폼 -->
+        <div id="pcat-if" style="display:none;" class="inline-form" style="margin-left:12px;">
+          <div style="font-size:12px;font-weight:500;color:var(--tx2);margin-bottom:8px;">소분류 추가 — 대분류: <span id="pcat-if-group-label" style="color:var(--blue);"></span></div>
+          <input type="hidden" id="pcat-f-group-id">
           <div class="fg">
             <div class="fi"><label>제품군명 *</label><input type="text" id="pcat-f-name" placeholder="예: 건조기"></div>
             <div class="fi"><label>코드 (영문 1-4자) *</label><input type="text" id="pcat-f-code" placeholder="예: DR" maxlength="4" style="text-transform:uppercase;"></div>
-            <div class="fi full"><label>대분류</label><select id="pcat-f-group"><option value="">선택</option></select></div>
           </div>
-          <div class="inline-form-actions"><button class="btn sm" data-fn="closeIFpcat">취소</button><button class="btn sm pri" data-fn="savePcatItem">저장</button></div>
+          <div class="inline-form-actions"><button class="btn sm" data-fn="closePcatIF">취소</button><button class="btn sm pri" data-fn="savePcatItem">저장</button></div>
         </div>
-        <div style="background:var(--bg2);border-radius:var(--r-lg);overflow:hidden;" id="pcat-list"></div>
+        <div id="product-tree-list"></div>
+      </div>
+      <!-- 주소록 -->
+      <div class="sp" id="sp-addressbook">
+        <div class="sh">
+          <div><h2>주소록 관리</h2><p style="font-size:12px;color:var(--tx2);margin-top:3px;">xlsx 파일 업로드 → 물류사별 LM 정보 자동 연동</p></div>
+          <label class="btn pri sm" style="cursor:pointer;">
+            xlsx 업로드
+            <input type="file" accept=".xlsx" style="display:none;" data-fnc="loadAddressbookFile">
+          </label>
+        </div>
+        <div id="addressbook-table" style="overflow-x:auto;"></div>
       </div>
     </div>
   </div>
@@ -1040,6 +1067,22 @@ body{font-family:var(--font);font-size:14px;color:var(--tx1);background:var(--bg
 </div>
 
 </div><!-- /app -->
+
+<!-- 제품구분 추가 모달 -->
+<div class="ov" id="pcat-add-modal">
+  <div class="modal" style="max-width:400px;">
+    <div class="mh"><h2>제품구분 추가</h2><button class="btn sm" data-fn="closePcatAddModal"><svg class="ico ico-md"><use href="#ico-x"/></svg></button></div>
+    <div class="mb">
+      <input type="hidden" id="pcat-add-group-id">
+      <div style="font-size:12px;color:var(--tx2);margin-bottom:4px;">대분류: <span id="pcat-add-group-label" style="color:var(--blue);font-weight:500;"></span></div>
+      <div class="fg">
+        <div class="fi"><label>제품코드 (영문 1-4자) *</label><input type="text" id="pcat-add-code" placeholder="예: AC" maxlength="4" style="text-transform:uppercase;"></div>
+        <div class="fi"><label>제품명 *</label><input type="text" id="pcat-add-name" placeholder="예: 에어컨"></div>
+      </div>
+    </div>
+    <div class="mf"><button class="btn" data-fn="closePcatAddModal">취소</button><button class="btn pri" data-fn="savePcatAddItem">저장</button></div>
+  </div>
+</div>
 
 <!-- 수정 모달 -->
 <div class="ov" id="edit-modal">

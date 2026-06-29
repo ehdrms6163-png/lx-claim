@@ -228,18 +228,7 @@ function defData(){
     {id:'pg3',name:'에어컨 신규',code:'ARN',desc:'Air conditioner New',clientId:'c-lg'},
     {id:'pg4',name:'에어컨 이전',code:'ARR',desc:'Air conditioner Relocation',clientId:'c-lg'},
   ];
-  productCats=[
-    {id:'pc1',name:'에어컨',code:'AC',groupId:'pg3'},
-    {id:'pc2',name:'바스에어',code:'BA',groupId:'pg3'},
-    {id:'pc3',name:'냉장고',code:'RF',groupId:'pg1'},
-    {id:'pc4',name:'세탁기',code:'WM',groupId:'pg1'},
-    {id:'pc5',name:'건조기',code:'DR',groupId:'pg1'},
-    {id:'pc6',name:'식기세척기',code:'DW',groupId:'pg2'},
-    {id:'pc7',name:'정수기',code:'WP',groupId:'pg2'},
-    {id:'pc8',name:'로봇청소기',code:'RC',groupId:'pg2'},
-    {id:'pc9',name:'빌트인',code:'BI',groupId:'pg2'},
-    {id:'pc10',name:'기타',code:'ETC',groupId:'pg1'},
-  ];
+  productCats=[];
   claims=[
     {id:'2026-AIR-AC-F-001',clientId:'c1',client:'비렉스테크',pcat:'AC',pcatName:'에어컨',groupId:'pg3',groupCode:'AIR',groupName:'에어컨',name:'김민수',phone:'010-1234-5678',addr:'서울 강남구 역삼동 123',product:'LG DUALCOOL FQ18VDWSA2',type:'화재',typeCode:'F',status:'검토',assignee:'동글',amount:1500000,date:'2026-06-10',idate:'2026-06-08',tname:'홍준표',tid:'T20341',insDate:'2026-06-10',insCoId:'i1',desc:'에어컨 설치 후 실외기 배선 과부하로 스파크 발생.',note:'PL 보험 검토 필요.',history:[{date:'2026-06-10',text:'클레임 접수'},{date:'2026-06-11',text:'현장 확인 요청'}]},
     {id:'2026-WB-DW-W-001',clientId:'c2',client:'코웨이',pcat:'DW',pcatName:'식기세척기',groupId:'pg2',groupCode:'WB',groupName:'정수기/빌트인',name:'이정현',phone:'010-9876-5432',addr:'경기 성남시 분당구 야탑동 45',product:'LG DIOS DFB22PT',type:'누수',typeCode:'W',status:'처리',assignee:'이민준',amount:320000,date:'2026-06-08',idate:'2026-06-06',tname:'박재현',tid:'T20187',insDate:'2026-06-08',insCoId:'i2',desc:'식기세척기 배수호스 불량 누수.',note:'',history:[{date:'2026-06-08',text:'클레임 접수'},{date:'2026-06-10',text:'수리 완료'}]},
@@ -2166,10 +2155,11 @@ function savePcatAddItem(){
   const code=($('pcat-add-code')||{}).value.trim().toUpperCase()||'';
   const name=($('pcat-add-name')||{}).value.trim()||'';
   if(!code||!name){alert('제품코드와 제품명을 입력하세요.');return;}
-  if(productCats.find(x=>x.code===code)){alert('이미 존재하는 제품코드입니다.');return;}
   const groupId=($('pcat-add-group-id')||{}).value||'';
   const pg=productGroups.find(g=>g.id===groupId);
-  productCats.push({id:uid('pc'),groupId,code,name,clientId:pg?pg.clientId:''});
+  const clientId=pg?pg.clientId:'';
+  if(productCats.find(x=>x.clientId===clientId&&x.code===code)){alert('해당 고객사에 이미 동일한 코드가 있습니다.');return;}
+  productCats.push({id:uid('pc'),groupId,code,name,clientId});
   persist();closePcatAddModal();renderProductTree();
 }
 
@@ -2177,10 +2167,11 @@ function savePcatItem(){
   const name=($('pcat-f-name')||{}).value.trim()||'';
   const code=($('pcat-f-code')||{}).value.trim().toUpperCase()||'';
   if(!name||!code){alert('제품군명과 코드 입력');return;}
-  if(productCats.find(x=>x.code===code)){alert('중복 코드');return;}
   const pgId=($('pcat-f-group-id')||{}).value||'';
   const pg=productGroups.find(g=>g.id===pgId);
-  productCats.push({id:uid('pc'),name,code,groupId:pgId,clientId:pg?pg.clientId:''});
+  const clientId=pg?pg.clientId:'';
+  if(productCats.find(x=>x.clientId===clientId&&x.code===code)){alert('중복 코드');return;}
+  productCats.push({id:uid('pc'),name,code,groupId:pgId,clientId});
   persist();closePcatIF();renderProductTree();
 }
 

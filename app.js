@@ -212,7 +212,7 @@ function saveApiKey(v){apiKey=v;localStorage.setItem('api_key',v);$('api-key-sta
 
 /* 마스터 데이터 */
 let clients, insCompanies, clientMapping, assignees, accidentTypes, productGroups, productCats, claims, epRecs, insFiles, templates, curInsCoId;
-let consumerCases=[], lawsuits=[], minorClaims=[], policySettings=[];
+let consumerCases=[], lawsuits=[], minorClaims=[], policySettings=[], addressbook=[];
 let editId=null, curDetail=null;
 let selInsColor=COLORS[0];
 
@@ -277,6 +277,7 @@ async function load(){
     lawsuits     = await DB.get('suit_v1', lawsuits);
     minorClaims  = await DB.get('minor_v1', minorClaims);
     policySettings= await DB.get('policy_v1', policySettings);
+    addressbook   = await DB.get('cfg_addressbook', addressbook);
     const m      = await DB.get('ep_col_map', {});
     ['name','addr','prod','idate','tname','tid'].forEach(k=>{if(m[k]&&$('m-'+k))$('m-'+k).value=m[k];});
   }catch(e){console.error('로드 오류:',e);defData();}
@@ -299,6 +300,7 @@ async function persist(){
       DB.set('suit_v1', lawsuits),
       DB.set('minor_v1', minorClaims),
       DB.set('policy_v1', policySettings),
+      DB.set('cfg_addressbook', addressbook),
     ]);
   }catch(e){console.error('저장 오류:',e);}
 }
@@ -471,6 +473,7 @@ function showSP(name,btn){
   if(name==='assignees')renderAsgnList();
   if(name==='products')renderProductTree();
   if(name==='accident-types')renderAtypeList();
+  if(name==='addressbook')renderAddressbook();
 }
 function showInsTab(name,btn){
   document.querySelectorAll('.stab').forEach(b=>b.classList.remove('active'));if(btn)btn.classList.add('active');
@@ -959,12 +962,13 @@ function _initHandlers(){
     epFileClick:()=>$('ep-file').click(),
     impCClick:()=>$('imp-c').click(),
     rptFileClick:()=>$('rpt-file').click(),
-    clearAutofill,closeCAModal,closeEM,
+    clearAutofill,closeCAModal,closeEM,exportXLSX:(el)=>exportXLSX(el.dataset.type),toggleExportMenu,
     closeIFasgn:()=>closeIF('asgn'),closeIFatype:()=>closeIF('atype'),
     closeIFclient:()=>closeIF('client'),closeIFins:()=>closeIF('ins'),
     closePcatIF,closePgroupIF,
     closeSuitModal,deleteClaim,editClaim,exportCSV,genReport,
     importClaims:(el)=>importClaims(el),
+    loadAddressbookFile:(el)=>loadAddressbookFile(el),
     loadEPFile:(el)=>loadEPFile(el),
     loadSampleEP,
     navSearch:(el)=>nav('search',el),
@@ -994,6 +998,7 @@ function _initHandlers(){
     searchEP:(el)=>searchEP(el.value),
     setQuickAll:()=>setQuick('all'),setQuickMonth:()=>setQuick('month'),
     setQuickQuarter:()=>setQuick('quarter'),setQuickYear:()=>setQuick('year'),
+    showInsPolicy:(el)=>showInsPolicy(el),
     showInsTabFiles:(el)=>showInsTab('files',el),
     showInsTabMapping:(el)=>showInsTab('mapping',el),
     showInsTabUnmatched:(el)=>showInsTab('unmatched',el),
@@ -1003,6 +1008,7 @@ function _initHandlers(){
     showSPinsurance:(el)=>showSP('insurance',el),
     showSPmapping:(el)=>showSP('mapping',el),
     showSPproducts:(el)=>showSP('products',el),
+    showSPaddressbook:(el)=>showSP('addressbook',el),
     updateIdPreview,
     uploadTemplate:(el)=>uploadTemplate(el),
     autoCreateClaims:(el)=>autoCreateClaims(JSON.parse(el.dataset.rows||'[]'),el.dataset.insid||''),
@@ -1019,6 +1025,8 @@ function _initHandlers(){
     if(dtab&&dtab.dataset.dashTab){switchDashTab(dtab.dataset.dashTab);return;}
     const l=$('ac-list');
     if(l&&!l.contains(e.target)&&e.target.id!=='ep-s')l.style.display='none';
+    const em=$('export-menu');
+    if(em&&!$('export-wrap')?.contains(e.target))em.style.display='none';
     let el=e.target;
     while(el&&el!==document.body){
       if(el.dataset){
@@ -1084,6 +1092,13 @@ function _initHandlers(){
     if(e.target.dataset&&e.target.dataset.insUpload){uploadInsFile(e.target,e.target.dataset.insUpload);return;}
     // data-map-id (고객사-보험사 매핑 select)
     if(e.target.dataset&&e.target.dataset.mapId){clientMapping[e.target.dataset.mapId]=e.target.value;return;}
+    // 물류 선택 시 LM 정보 표시
+    if(e.target.id==='f-logistics'){
+      const lm=getLMInfo(e.target.value);
+      const box=$('lm-info-box');
+      if(box)box.innerHTML=lm?`<span style="font-size:11px;color:var(--tx2);">LM: <b>${lm.lmName||'-'}</b>${lm.lmEmail?' · '+lm.lmEmail:''} · 팀장: ${lm.teamLeader||'-'}</span>`:'';
+      return;
+    }
     let el=e.target;
     while(el&&el!==document.body){
       if(el.dataset&&el.dataset.fnc){const fn=FM[el.dataset.fnc];if(fn){fn(el);return;}}
@@ -1091,7 +1106,7 @@ function _initHandlers(){
     }
   });
   // 증권 모달 버튼
-  const bap=$('btn-add-policy');if(bap)bap.addEventListener('click',()=>openPolicyModal());
+  const bap=$('btn-add-ins-policy');if(bap)bap.addEventListener('click',()=>{const insId=bap.dataset.insId||'';openPolicyModal(null,insId);});
   const pmc=$('policy-modal-close');if(pmc)pmc.addEventListener('click',()=>$('policy-modal').classList.remove('open'));
   const pmca=$('policy-modal-cancel');if(pmca)pmca.addEventListener('click',()=>$('policy-modal').classList.remove('open'));
   const pms=$('policy-modal-save');if(pms)pms.addEventListener('click',savePolicyModal);
@@ -1657,6 +1672,33 @@ function openDetail(id){
         :'<div style="font-size:13px;color:var(--tx3);padding:8px 0;">연결된 소송 없음</div>'}
       </div>`;
     })()}
+    ${(()=>{
+      if(!c.tname)return '';
+      const hist=claims.filter(x=>x.id!==c.id&&x.tname===c.tname).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+      if(!hist.length)return '';
+      return `<div class="card" style="margin-bottom:13px;">
+        <h3 style="margin:0 0 9px;"><svg class="ico ico-md" style="color:var(--orange);"><use href="#ico-truck"/></svg> 동일 기사 사고 이력</h3>
+        <div style="font-size:12px;color:var(--tx3);margin-bottom:7px;">기사명: <b>${c.tname}</b> · 총 ${hist.length}건</div>
+        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+          <thead><tr style="border-bottom:1px solid var(--bdr);">
+            <th style="padding:4px 6px;text-align:left;color:var(--tx3);font-weight:500;">접수번호</th>
+            <th style="padding:4px 6px;text-align:left;color:var(--tx3);font-weight:500;">사고유형</th>
+            <th style="padding:4px 6px;text-align:left;color:var(--tx3);font-weight:500;">상태</th>
+            <th style="padding:4px 6px;text-align:left;color:var(--tx3);font-weight:500;">접수일</th>
+            <th style="padding:4px 6px;text-align:left;color:var(--tx3);font-weight:500;">고객명</th>
+          </tr></thead>
+          <tbody>${hist.map(x=>`
+            <tr style="border-bottom:0.5px solid var(--bdr2);cursor:pointer;" data-goto-claim="${x.id}">
+              <td style="padding:5px 6px;font-family:var(--mono);color:var(--blue);">${x.id}</td>
+              <td style="padding:5px 6px;">${x.atype||'-'}</td>
+              <td style="padding:5px 6px;"><span class="st-${x.status||''}">${x.status||'-'}</span></td>
+              <td style="padding:5px 6px;">${x.date||'-'}</td>
+              <td style="padding:5px 6px;">${x.cname||'-'}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`;
+    })()}
     <div class="aib"><h3><svg class="ico ico-md" style="color:var(--blue);"><use href="#ico-robot"/></svg> AI 분석 · 초안 생성</h3>
       <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:9px;">
         <button class="btn sm" data-fn="runAIanalyze"><svg class="ico ico-md"><use href="#ico-search"/></svg> 클레임 분석</button>
@@ -1816,7 +1858,72 @@ function genReport(){
 /* ══════════════════════════════════════════════
    SETTINGS
 ══════════════════════════════════════════════ */
-function renderAllSettings(){renderClientsList();renderInsList();renderCfgMapping();renderAsgnList();renderAtypeList();if($('product-tree-list'))renderProductTree();}
+function renderAllSettings(){renderClientsList();renderInsList();renderCfgMapping();renderAsgnList();renderAtypeList();if($('product-tree-list'))renderProductTree();renderAddressbook();}
+function renderAddressbook(){
+  const el=$('addressbook-table');if(!el)return;
+  if(!addressbook.length){el.innerHTML='<div style="font-size:13px;color:var(--tx3);padding:12px 0;">주소록을 업로드해주세요</div>';return;}
+  el.innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:12px;">
+    <thead><tr style="border-bottom:1px solid var(--bdr);">
+      <th style="padding:4px 6px;text-align:left;color:var(--tx3);font-weight:500;">팀</th>
+      <th style="padding:4px 6px;text-align:left;color:var(--tx3);font-weight:500;">물류센터</th>
+      <th style="padding:4px 6px;text-align:left;color:var(--tx3);font-weight:500;">업무구분</th>
+      <th style="padding:4px 6px;text-align:left;color:var(--tx3);font-weight:500;">BP사명</th>
+      <th style="padding:4px 6px;text-align:left;color:var(--tx3);font-weight:500;">LM</th>
+      <th style="padding:4px 6px;text-align:left;color:var(--tx3);font-weight:500;">LM 이메일</th>
+      <th style="padding:4px 6px;text-align:left;color:var(--tx3);font-weight:500;">팀장</th>
+    </tr></thead>
+    <tbody>${addressbook.map(r=>`
+      <tr style="border-bottom:0.5px solid var(--bdr2);">
+        <td style="padding:4px 6px;">${r.lineTeam||''}</td>
+        <td style="padding:4px 6px;">${r.logistics||''}</td>
+        <td style="padding:4px 6px;">${r.bizType||''}</td>
+        <td style="padding:4px 6px;">${r.bpName||''}</td>
+        <td style="padding:4px 6px;">${r.lmName||''}</td>
+        <td style="padding:4px 6px;">${r.lmEmail||''}</td>
+        <td style="padding:4px 6px;">${r.teamLeader||''}</td>
+      </tr>`).join('')}
+    </tbody>
+  </table>`;
+}
+function loadAddressbookFile(el){
+  const file=el.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const wb=XLSX.read(e.target.result,{type:'array'});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+      const parsed=[];let curTeam='',curLogistics='';
+      for(let i=5;i<rows.length;i++){
+        const r=rows[i];
+        if(!r.some(Boolean))continue;
+        if(r[0])curTeam=String(r[0]).trim();
+        if(r[1])curLogistics=String(r[1]).trim();
+        const lmRaw=String(r[8]||'').trim();
+        const lmName=lmRaw.split(/[\n\r]/)[0].trim();
+        const leaderRaw=String(r[10]||'').trim();
+        const teamLeader=leaderRaw.split(/[\n\r]/)[0].trim();
+        parsed.push({
+          lineTeam:curTeam,
+          logistics:curLogistics,
+          bizType:String(r[2]||'').trim(),
+          bpName:String(r[3]||'').trim(),
+          lmName,
+          lmEmail:String(r[9]||'').trim(),
+          teamLeader,
+        });
+      }
+      addressbook=parsed;persist();renderAddressbook();
+      alert('주소록 '+parsed.length+'건 저장 완료');
+    }catch(err){alert('파일 파싱 오류: '+err.message);}
+  };
+  reader.readAsArrayBuffer(file);
+  el.value='';
+}
+function getLMInfo(logisticsName){
+  if(!logisticsName)return null;
+  return addressbook.find(r=>r.logistics&&r.logistics.includes(logisticsName))||null;
+}
 
 /* 고객사 */
 function renderClientsList(){
@@ -1852,10 +1959,23 @@ function renderInsList(){
         <span class="ei-badge">${clients.filter(c=>clientMapping[c.id]===ins.id).length}개 고객사 담당</span>
       </div>
       <div style="display:flex;gap:4px;">
+        <button class="btn sm" data-fn="showInsPolicy" data-ins-id="${ins.id}">증권 관리</button>
         <button class="btn sm icon" data-em-type="ins" data-em-id="${ins.id}"><svg class="ico ico-md"><use href="#ico-pencil"/></svg></button>
         <button class="btn sm icon dng" data-del-type="ins" data-del-id="${ins.id}"><svg class="ico ico-md"><use href="#ico-trash"/></svg></button>
       </div>
     </div>`).join(''):'<div class="empty" style="padding:20px;">보험사가 없습니다</div>';
+}
+function showInsPolicy(el){
+  const insId=el.dataset.insId;
+  const ins=insCompanies.find(x=>x.id===insId);
+  const sec=$('ins-policy-section');
+  if(!sec)return;
+  const lbl=$('ins-policy-label');
+  if(lbl)lbl.textContent=ins?ins.name+' 증권 목록':'증권 목록';
+  const addBtn=$('btn-add-ins-policy');
+  if(addBtn)addBtn.dataset.insId=insId;
+  sec.style.display='';
+  renderPolicyList(insId);
 }
 function saveInsItem(){
   const name=($('ins-f-name')||{}).value||'';if(!name.trim()){alert('보험사명 입력');return;}
@@ -2026,7 +2146,8 @@ function savePcatItem(){
   if(!name||!code){alert('제품군명과 코드 입력');return;}
   if(productCats.find(x=>x.code===code)){alert('중복 코드');return;}
   const pgId=($('pcat-f-group-id')||{}).value||'';
-  productCats.push({id:uid('pc'),name,code,groupId:pgId});
+  const pg=productGroups.find(g=>g.id===pgId);
+  productCats.push({id:uid('pc'),name,code,groupId:pgId,clientId:pg?pg.clientId:''});
   persist();closePcatIF();renderProductTree();
 }
 
@@ -2112,12 +2233,32 @@ function closeEM(){$('edit-modal').classList.remove('open');}
 /* ══════════════════════════════════════════════
    EXPORT / IMPORT
 ══════════════════════════════════════════════ */
-function exportCSV(){
-  const hdr=['접수번호','대분류','제품군','고객사','담당보험사','고객명','연락처','주소','제품모델','통문일자','설치기사','기사ID','사고유형','귀책여부','평가반영','상태','담당자','손해액','보험접수일','클레임입력일','내용','비고'];
-  const rows=claims.map(c=>[c.id,c.groupName||'',c.pcatName||'',c.client||'',c.insCoId?getInsName(c.insCoId):(c.clientId?getInsForClient(c.clientId)?.name||'':''),c.name,c.phone||'',c.addr||'',c.product||'',c.idate||'',c.tname||'',c.tid||'',c.type,c.liability||'',c.evalReflect||'',c.status,c.assignee,c.amount||0,c.insDate||'',c.date,c.desc,c.note||'']);
-  const csv='\uFEFF'+[hdr,...rows].map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
-  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
-  const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='클레임_'+new Date().toISOString().slice(0,10)+'.csv';a.click();URL.revokeObjectURL(url);
+function exportCSV(){exportXLSX('claims');}
+function toggleExportMenu(){
+  const m=$('export-menu');if(!m)return;
+  m.style.display=m.style.display==='none'?'block':'none';
+}
+function exportXLSX(type){
+  const m=$('export-menu');if(m)m.style.display='none';
+  let data,filename;
+  if(type==='claims'){
+    filename='보험클레임_';
+    data=claims.map(c=>({'접수번호':c.id,'고객명':c.name,'주소':c.addr||'','고객사':c.client||'','물류':c.logistics||'','사고유형':c.type||'','제품군':c.pcatName||'','상태':c.status||'','보험접수번호':c.insNo||'','보험사':c.insCoId?getInsName(c.insCoId):'','접수일':c.insDate||c.date||'','추산보험금':c.amount||0,'조사비OS':c.surveyOS||0,'지급보험금':c.finalPayment||0,'조사비':c.survey||0,'귀책여부':c.liability||''}));
+  }else if(type==='minor'){
+    filename='소액클레임_';
+    data=minorClaims.map(c=>({'접수번호':c.id||'','고객명':c.name||'','주소':c.addr||'','물류':c.logistics||'','사고유형':c.type||'','상태':c.status||'','접수일':c.date||'','청구금액':c.claimAmt||0,'지급금액':c.paidAmt||0,'비고':c.note||''}));
+  }else if(type==='consumer'){
+    filename='소비자원_';
+    data=consumerCases.map(c=>({'접수번호':c.id||'','신청인':c.name||'','물류':c.logistics||'','유형':c.type||'','상태':c.status||'','접수일':c.date||'','청구금액':c.claimAmt||0,'결정금액':c.decisionAmt||0,'비고':c.note||''}));
+  }else if(type==='suit'){
+    filename='소송_';
+    data=lawsuits.map(s=>({'사건번호':s.no||'','원고':s.plaintiff||'','피고1':s.defendant||'','피고2':s.defendant2||'','관할법원':s.court||'','보험사':s.insCoId?getInsName(s.insCoId):'','법무법인':s.lawfirm||'','상태':s.status||'','결과':s.result||'','소가':s.amount||0,'접수일':s.date||'','다음기일':s.nextDate||''}));
+  }
+  if(!data||!data.length){alert('내보낼 데이터가 없습니다.');return;}
+  const ws=XLSX.utils.json_to_sheet(data);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'데이터');
+  XLSX.writeFile(wb,filename+new Date().toISOString().slice(0,10)+'.xlsx');
 }
 function importClaims(input){const f=input.files[0];if(!f)return;const r=new FileReader();r.onload=e=>{try{const d=JSON.parse(e.target.result);if(Array.isArray(d)){claims=d;persist();renderDash();}else console.error('형식 오류');}catch(err){console.error('파싱 오류');}};r.readAsText(f);input.value='';}
 
@@ -2639,10 +2780,11 @@ function renderLinkedCard({claimId, minorId, caId, suitId, selfClaimId}={}){
    증권 관리 (보험사별)
 ══════════════════════════════════════════════ */
 let curPolicyId=null;
-function renderPolicyList(){
+function renderPolicyList(filterInsId){
   const el=$('policy-list');if(!el)return;
-  if(!policySettings.length){el.innerHTML='<div style="font-size:13px;color:var(--tx3);padding:8px 0;">등록된 증권 없음</div>';return;}
-  el.innerHTML=policySettings.map(p=>{
+  const list=filterInsId?policySettings.filter(p=>p.insId===filterInsId):policySettings;
+  if(!list.length){el.innerHTML='<div style="font-size:13px;color:var(--tx3);padding:8px 0;">등록된 증권 없음</div>';return;}
+  el.innerHTML=list.map(p=>{
     const ins=insCompanies.find(x=>x.id===p.insId);
     const typeLabel=p.type==='HA'?'가정설치':'에어컨+정수기/빌트인';
     // 현재 유효한 증권인지
@@ -2672,12 +2814,13 @@ function renderPolicyList(){
     });
   });
 }
-function openPolicyModal(id){
+function openPolicyModal(id,defaultInsId){
   curPolicyId=id||null;
   const p=(id?policySettings.find(x=>x.id===id):null)||{};
+  const preInsId=p.insId||defaultInsId||'';
   $('policy-modal-title').textContent=id?'증권 수정':'증권 등록';
   const ins=$('pm-f-ins');
-  if(ins)ins.innerHTML='<option value="">선택</option>'+(insCompanies||[]).map(x=>'<option value="'+x.id+'" '+(p.insId===x.id?'selected':'')+'>'+x.name+'</option>').join('');
+  if(ins)ins.innerHTML='<option value="">선택</option>'+(insCompanies||[]).map(x=>'<option value="'+x.id+'" '+(preInsId===x.id?'selected':'')+'>'+x.name+'</option>').join('');
   const fno=$('pm-f-no');if(fno)fno.value=p.no||'';
   const ftype=$('pm-f-type');if(ftype)ftype.value=p.type||'HA';
   const flimit=$('pm-f-limit');if(flimit)flimit.value=p.limit||'';
@@ -2698,7 +2841,9 @@ function savePolicyModal(){
   if(curPolicyId){const i=policySettings.findIndex(x=>x.id===curPolicyId);if(i>=0)policySettings[i]=d;}
   else policySettings.unshift(d);
   persist();$('policy-modal').classList.remove('open');
-  renderPolicyList();renderPolicyStats();
+  const sec=$('ins-policy-section');
+  const curInsId=($('btn-add-ins-policy')||{}).dataset&&$('btn-add-ins-policy').dataset.insId;
+  renderPolicyList(sec&&sec.style.display!=='none'?curInsId:undefined);renderPolicyStats();
 }
 function renderPolicyStats(){
   const el=$('policy-stat-grid');if(!el)return;

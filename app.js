@@ -1010,6 +1010,7 @@ function _initHandlers(){
     showSPmapping:(el)=>showSP('mapping',el),
     showSPproducts:(el)=>showSP('products',el),
     showSPaddressbook:(el)=>showSP('addressbook',el),
+    delAddressRow:(el)=>delAddressRow(el),
     updateIdPreview,
     uploadTemplate:(el)=>uploadTemplate(el),
     autoCreateClaims:(el)=>autoCreateClaims(JSON.parse(el.dataset.rows||'[]'),el.dataset.insid||''),
@@ -1872,8 +1873,9 @@ function renderAddressbook(){
       <th style="padding:4px 6px;text-align:left;color:var(--tx3);font-weight:500;">LM</th>
       <th style="padding:4px 6px;text-align:left;color:var(--tx3);font-weight:500;">LM 이메일</th>
       <th style="padding:4px 6px;text-align:left;color:var(--tx3);font-weight:500;">팀장</th>
+      <th style="padding:4px 6px;"></th>
     </tr></thead>
-    <tbody>${addressbook.map(r=>`
+    <tbody>${addressbook.map((r,i)=>`
       <tr style="border-bottom:0.5px solid var(--bdr2);">
         <td style="padding:4px 6px;">${r.lineTeam||''}</td>
         <td style="padding:4px 6px;">${r.logistics||''}</td>
@@ -1882,9 +1884,16 @@ function renderAddressbook(){
         <td style="padding:4px 6px;">${r.lmName||''}</td>
         <td style="padding:4px 6px;">${r.lmEmail||''}</td>
         <td style="padding:4px 6px;">${r.teamLeader||''}</td>
+        <td style="padding:4px 6px;"><button class="btn sm icon dng" data-fn="delAddressRow" data-idx="${i}"><svg class="ico ico-md"><use href="#ico-trash"/></svg></button></td>
       </tr>`).join('')}
     </tbody>
   </table>`;
+}
+function delAddressRow(el){
+  const idx=parseInt(el.dataset.idx,10);
+  if(isNaN(idx))return;
+  addressbook.splice(idx,1);
+  persist();renderAddressbook();
 }
 function loadAddressbookFile(el){
   const file=el.files[0];if(!file)return;
